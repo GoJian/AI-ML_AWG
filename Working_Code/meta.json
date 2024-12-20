@@ -1,0 +1,10 @@
+{
+    "cat": [
+        "Sex",
+        "Diet",
+        "Group"
+    ],
+    "num": [
+        "Mission Length Weeks"
+    ]
+}

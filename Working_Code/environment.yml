@@ -1,0 +1,27 @@
+name: awg
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - requests
+  - pandas
+  - ipykernel
+  - tqdm
+  - scanpy
+  - numpy
+  - pydrive
+  - google-colab
+  - imp
+  - ocl-icd-system
+  - lxml
+  - pytorch-lightning
+  - torchvision
+  - tensorboard
+  - pytorch-cuda=12.4
+  - torchaudio
+  - pytorch
+  - kaggle
+  - pyarrow
+  - plotly
+  - openpyxl
+  - tensorflow
