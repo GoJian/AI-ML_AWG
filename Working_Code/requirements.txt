@@ -1,7 +1,7 @@
 pandas
 requests
 openpyxl
-scikit-learn~=1.6.0
+scikit-learn~=1.5.2
 skimpy~=0.0.16
 seaborn~=0.13.2
 feature-engine~=1.8.2
