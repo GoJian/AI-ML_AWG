@@ -1,0 +1,15 @@
+total 56K
+drwxrwxr-x 14 gojian gojian 4.0K May  1  2024 .
+drwxr-xr-x  9 gojian gojian 4.0K Dec 21 04:42 ..
+drwxrwxr-x  2 gojian gojian 4.0K Mar 14  2024 NCBI_Human
+drwxrwxr-x  3 gojian gojian 4.0K May  1  2024 OSD-194
+drwxrwxr-x  3 gojian gojian 4.0K May  1  2024 OSD-203
+drwxrwxr-x  3 gojian gojian 4.0K May  1  2024 OSD-255
+drwxrwxr-x  4 gojian gojian 4.0K Mar 18  2024 OSD-366
+drwxrwxr-x  3 gojian gojian 4.0K May  1  2024 OSD-397
+drwxrwxr-x  5 gojian gojian 4.0K Mar 14  2024 OSD-557
+drwxrwxr-x  4 gojian gojian 4.0K Mar 14  2024 OSD-568
+drwxrwxr-x  3 gojian gojian 4.0K Mar 14  2024 OSD-583
+drwxrwxr-x  3 gojian gojian 4.0K Mar 14  2024 OSD-87
+drwxrwxr-x  2 gojian gojian 4.0K Apr 11  2024 RR9_Documents
+drwxrwxr-x  2 gojian gojian 4.0K May  1  2024 Share
