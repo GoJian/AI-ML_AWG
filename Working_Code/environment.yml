@@ -12,16 +12,15 @@ dependencies:
   - pydrive
   - google-colab
   - imp
-  - ocl-icd-system
   - lxml
   - pytorch-lightning
   - torchvision
-  - tensorboard
-  - pytorch-cuda=12.4
   - torchaudio
   - pytorch
   - kaggle
   - pyarrow
   - plotly
   - openpyxl
-  - tensorflow
+  - skimpy
+  - streamlit
+  - feature_engine
