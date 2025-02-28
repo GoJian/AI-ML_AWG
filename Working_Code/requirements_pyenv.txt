@@ -7,3 +7,4 @@ seaborn~=0.13.2
 feature-engine~=1.8.2
 plotly~=5.24.1
 nbformat~=5.10.4
+quarto~=0.1.0
