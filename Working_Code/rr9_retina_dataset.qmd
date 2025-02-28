@@ -5,6 +5,10 @@ format:
     html:
         code-fold: true
         page-layout: full
+        code-overflow: wrap
+        embed-resources: true 
+        smooth-scroll: true
+        anchor-sections: true
 ---
 ## Digital Twin Project Description
 Space biology confronts a critical obstacle: the challenge of incomplete data due to the logistical complexities and high costs of space missions. Addressing this issue, this research presents strategies that integrate AI and digital twin technology to overcome the limitations posed by sparse datasets in space biology research.
