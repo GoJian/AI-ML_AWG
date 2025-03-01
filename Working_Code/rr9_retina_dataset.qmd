@@ -3,11 +3,12 @@ title: 'RR9 Retina Dataset Integration'
 author: 'Lauren Sanders, Jian Gong, Vaishnavi Nagesh'
 format:
     html:
+        toc: true
+        toc-depth: 5
         code-fold: true
         page-layout: full
         code-overflow: wrap
         embed-resources: true 
-        smooth-scroll: true
         anchor-sections: true
 ---
 ## Digital Twin Project Description
@@ -42,34 +43,33 @@ The purpose of this notebook is to combine all retina data from the [Rodent Rese
 
 **Additional Author(s):** Jian Gong, Vaishnavi Nagesh
 
-## Import Statements
-
-Importing all the required libraries here, declare global variables like source name dictionary.
-
 ```{python}
+#| label: Import libraries
 #| echo: False
 import pandas as pd
+from itables import show
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from skimpy import skim, skim_get_figure
+import plotly.express as px
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 import requests
 import logging
 import os
+
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 ```
 
 ```{python}
 #| echo: False
+#| label: Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 ```
 ```{python}
-# Decalre source name mapping
-# Add Source Name to all the dfs that are missing it
-# Rename some Source Names that already exist
-
-#Fviv = CC1 (confirmed in OSD-583 metadata)
-#GViv = CC2?
-
+#| echo: False
+#| label: Global variables
 GSM_DICT = {
     "GSM3932702": "F11",
     "GSM3932703": "F15",
@@ -92,8 +92,21 @@ GSM_DICT = {
 ```
 
 ## Load Data
+We are downloading all the relevant data as shown in the the table below.
 ```{python}
+#| echo: False
+data_to_download=pd.DataFrame({'Data Type':['rnaseq', 'Zo-1(ImmunoStaining Microcopy)', 'TUNEL Assay', 'PECAM(ImmunoStaining Microscopy)', 'microct(Micro CT)', 'PNA(ImmunoStaining Microscopy)', 'HNE(ImmunoStaining Microscopy)', 'Tonometry', 'Protein(Proteomics)'],
+'Data Links':['https://osdr.nasa.gov/geode-py/ws/studies/OSD-255/download?source=datamanager&file=GLDS-255_rna_seq_Normalized_Counts.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_Zo-1tr_TRANSFORMED.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_TUNELtr_TRANSFORMED.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_PECAMtr_TRANSFORMED.csv', 'https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_microCT_MicroCT_Transformed_Reusable_Results.csv', 'https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_immunostaining_microscopy_PNAtr_Transformed_Reusable_Results.csv',
+'https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_immunostaining_microscopy_HNEtr_Transformed_Reusable_Results.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-583/download?source=datamanager&file=LSDS-16_tonometry_maoTRANSFORMED.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-715/download?source=datamanager&file=GLDS-639_proteomics_01_Mao_RR9_Retina_092018_MQ_iBAQ.xlsx']
+})
+show(data_to_download)
+```
+
+
+```{python}
+#| label: Download all relevant data
 #| cache: True
+#| echo: False
 ## Using the Data API from the OSDR Public API
 ## Documentation: https://www.nasa.gov/reference/osdr-public-api/
 
@@ -137,8 +150,9 @@ sc_gp = pd.DataFrame({'Source Name': ["F1", "F2", "F3", "F4", "F5", "F6", "F7", 
 
 
 ## Data Exploration and Validation
+The below table shows number of features in each dataset that constitute the RR9 multi-modal data. This is useful in identifying the maximum number of PCA components required to explain the cumulative variance in the dataset.
 ```{python}
-#| cache: True
+#| echo: False
 # Drop "Sample Name" and a couple other irrelevant columns
 zo1.drop(columns=['Sample_Name'], inplace=True)
 tunel.drop(columns=['Sample_Name'], inplace=True)
@@ -164,20 +178,21 @@ for df in dfs:
     df['Source Name'] = df['Source Name'].astype(str)
     df.set_index('Source Name',inplace=True)
 
-
 # Merge all DataFrames on "Source Name" column
 rr9_all_df = pd.concat(dfs, axis=1, join='outer')
 rr9_all_df['Source Name'] = rr9_all_df.index
 rr9_all_df = rr9_all_df.reset_index(drop=True)
 rr9_all_df['Group'] = rr9_all_df['Group'].astype('category')
-# Add groups feature to the df.
+
+shape_summary_df = pd.DataFrame({'Data':['tonometry','rnaseq', 'protein', 'zo1', 'tunel', 'pecam', 'microct', 'pna', 'hne'],
+'Rows X Features':[tonometry.shape,rnaseq.shape, protein.shape, zo1.shape, tunel.shape, pecam.shape, microct.shape, pna.shape, hne.shape]})
+show(shape_summary_df)
 ```
+
 
 ## Summary of the Merged Data frame
 ```{python}
-#| cache: True
 #| echo: False
-#| 
 rr9_all_df.describe(include='all')
 cat_cols = {
     'tonometry':tonometry.columns.tolist(),
@@ -201,15 +216,141 @@ category_series = pd.Series(col_to_category)
 category_presence = rr9_all_df.notnull().groupby(category_series, axis=1).any()
 
 
-plt.figure(figsize=(20,6))
+plt.figure(figsize=(15,5))
 ax = sns.heatmap(category_presence.T,cmap='Blues', cbar=True, linewidths=1, linecolor="black")
 
 ax.set_xticks(range(len(rr9_all_df['Source Name'])))
-ax.set_xticklabels(rr9_all_df['Source Name'], rotation=90, fontsize=8)  # Rotate to avoid overlap
-ax.set_ylabel("Sample Names")
-ax.set_xlabel("Categories")
+ax.set_xticklabels(rr9_all_df['Source Name'], rotation=90, fontsize=6, fontweight ="bold")
+ax.set_xlabel("Sample Names")
+ax.set_ylabel("Categories")
 plt.title("Heatmap of Data Availability per Category")
-
 plt.show()
+```
+
+
+```{python}
+#| echo: False
+# Prior to running PCA, all the tonometry data needs to be normalized.
+def perform_pca(df,ideal_pca_components=2, dataset_name=tonometry):
+    '''
+    The function takes input of the name of the dataset based on list defined above. If the name is not in the name of the dataset in dfs, then the function will error out.
+    The idea of this function is to do a PCA analysis the different modalities of the data within the rr9 dataset against different groups available.
+    '''
+    cols_to_select = dataset_name.columns.tolist() + ['Source Name', 'Group']
+    dataset_cols = dataset_name.columns.tolist()
+    subset_df = df[cols_to_select].dropna(how='any').reset_index(drop=True)
+    std_scaler = StandardScaler()
+    scaled_df = std_scaler.fit_transform(subset_df[dataset_cols])
+
+    pca = PCA(random_state=2).fit(scaled_df)
+    n = pca.n_components_
+    grid = np.arange(1, n + 1)
+    evr = pca.explained_variance_ratio_
+   
+    fig, axs = plt.subplots(1, 2)
+    axs[0].bar(grid, evr)
+    axs[0].set(
+        xlabel="Component", title="% Explained Variance", ylim=(0.0, round(10*max(evr)+0.5)/10)
+    )
+    axs[0].title.set_weight('bold')
+    axs[0].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    axs[0].set_xticks(grid)
+    axs[0].set_xticklabels(grid)
+
+    # Cumulative Variance
+    cv = np.cumsum(evr)
+    ideal_pca_components = np.argmax(cv > 0.95) + 1
+    axs[1].plot(grid, cv, "o-")
+    axs[1].set(
+        xlabel="Component", title=f"% Cumulative Variance, setting n_components={ideal_pca_components}", ylim=(0.0, 1.01)
+    )
+    axs[1].title.set_weight('bold')
+    axs[1].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    axs[1].set_xticks(grid)
+    axs[1].set_xticklabels(grid)
+
+    # Cumulative variance value on the 2nd plot
+    axs[1].annotate(f'CV={cv[-1]:.3f}', (grid[-1], cv[-1]), textcoords="offset points", xytext=(-15,-10), ha='center')
+
+    # Set up figure
+    fig.set(figwidth=10)
+    
+    pca_final = PCA(n_components=ideal_pca_components, random_state=2)
+
+    pca_df = pd.DataFrame(pca_final.fit_transform(scaled_df))
+    pca_df.columns = ["PCA_" + str(i) for i in range(1, ideal_pca_components+1)]
+    pca_df = pd.concat([subset_df[['Source Name', 'Group']], pca_df], axis=1)
+
+    if ideal_pca_components>2:
+        scatter_plot = px.scatter_3d(pca_df, x='PCA_1', y='PCA_2', z='PCA_3', color='Group', title=f'PCA Projections Against Groups')
+    else:
+        scatter_plot = px.scatter(pca_df, x='PCA_1', y='PCA_2', color='Group', title=f'PCA Projections Against Groups')
+        scatter_plot.update_traces(marker=dict(size=12,
+                              line=dict(width=2,
+                                        color='DarkSlateGrey')),
+                  selector=dict(mode='markers'))
+
+    return pca_df, scatter_plot    
+```
+
+## PCA on Different Categories of Datasets
+
+#### PCA on RNASeq
+```{python}
+#| echo: False
+rnaseq_pca_df, scatter_plt  = perform_pca(rr9_all_df,dataset_name=rnaseq)
+scatter_plt.show()
+```
+
+#### PCA on Proteomics
+```{python}
+#| echo: False
+protein_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=protein)
+scatter_plt
+```
+
+#### PCA on TUNEL Assay
+```{python}
+#| echo: False
+tunel_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=tunel)
+scatter_plt
+# protein, zo1, tunel, pecam, microct, pna, hne
+```
+
+#### PCA on HNE Immunostaining Micoscopy
+```{python}
+#| echo: False
+hne_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=hne)
+
+scatter_plt.show()
 
 ```
+
+
+#### PCA on Micro CT
+```{python}
+#| echo: False
+miroct_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=microct)
+
+scatter_plt.show()
+
+```
+
+#### PCA on Combined Immunostaining Micoscopy data from Zo-1, PECAM, PNA and HNE
+Zo-1, PECAM, PNA and HNE are all immunostaining microscopy. It would be useful to see if combining them all helps in better separation between the groups.
+```{python}
+#| echo: False
+# Combining all Immunostaining microscopy data
+immuno_mic = pd.concat([zo1, pecam, pna, hne], axis=1, join='outer')
+immuno_mic_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=immuno_mic)
+
+scatter_plt.show()
+```
+
+From the PCA analysis of different datasets, it seems like there is fair separation betwee flight and other groups. However, there isn't sufficient data to show separation between GC, Viv and CC groups.
+
+
+## Data Analysis Correlation Between HNE and RNASeq
+HNE Immunostaining microscopy has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both HNE and RNASeq.
+
+To be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and HNE needs to be determined.
