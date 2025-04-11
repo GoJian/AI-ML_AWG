@@ -65,7 +65,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 ```{python}
 #| echo: False
 #| label: Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 ```
 ```{python}
 #| echo: False
@@ -302,6 +302,65 @@ rnaseq_pca_df, scatter_plt  = perform_pca(rr9_all_df,dataset_name=rnaseq)
 scatter_plt.show()
 ```
 
+#### PCA on RNASeq for Only Predictive Genes for Phenotype
+```{python}
+genes_predictive_of_phenotypes = [
+    'ENSMUSG00000021185',
+    'ENSMUSG00000021432',
+    'ENSMUSG00000021712',
+    'ENSMUSG00000023484',
+    'ENSMUSG00000025484',
+    'ENSMUSG00000026768',
+    'ENSMUSG00000028184',
+    'ENSMUSG00000028423',
+    'ENSMUSG00000029499',
+    'ENSMUSG00000036636',
+    'ENSMUSG00000039994',
+    'ENSMUSG00000041685',
+    'ENSMUSG00000042190',
+    'ENSMUSG00000045318',
+    'ENSMUSG00000050538',
+    'ENSMUSG00000052373',
+    'ENSMUSG00000068250',
+    'ENSMUSG00000068394',
+    'ENSMUSG00000070822',
+    'ENSMUSG00000073879',
+    'ENSMUSG00000084408',
+    'ENSMUSG00000097061',
+    'ENSMUSG00000097180',
+    'ENSMUSG00000106147',
+    'ENSMUSG00000107195',
+    'ENSMUSG00000110357',
+]
+set(genes_predictive_of_phenotypes).issubset(rnaseq.columns.to_list())
+
+# Filter the RNASeq dataset to include only the genes predictive of phenotypes
+filtered_rnaseq = rnaseq[genes_predictive_of_phenotypes]
+
+# Perform PCA on the filtered dataset
+phenotype_rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=filtered_rnaseq)
+scatter_plt.show()
+```
+
+#### PCA on Phenotype Related RNASeq Genes
+```{python}
+# Read the gene list from the file
+with open('pheno_genes.txt', 'r') as file:
+    pheno_genes = [line.strip() for line in file]
+
+# Filter the gene list to include only those present in the RNASeq dataset
+found_genes = [gene for gene in pheno_genes if gene in rnaseq.columns]
+print(len(found_genes), "genes found in the RNASeq dataset.")
+
+# Filter the RNASeq dataset to include only the genes predictive of phenotypes
+filtered_pheno_genes_rnaseq = rnaseq[found_genes]
+
+# Perform PCA on the filtered dataset
+pheno_genes_rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=filtered_pheno_genes_rnaseq)
+scatter_plt.show()
+```
+
+
 #### PCA on Proteomics
 ```{python}
 #| echo: False
@@ -354,3 +413,86 @@ From the PCA analysis of different datasets, it seems like there is fair separat
 HNE Immunostaining microscopy has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both HNE and RNASeq.
 
 To be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and HNE needs to be determined.
+
+```{python}
+rna_cols_to_select = found_genes +['Source Name', 'Group']
+hne_cols_to_select = hne.columns.tolist() + ['Source Name', 'Group']
+rnaseq_filtered = rr9_all_df[rna_cols_to_select].dropna(how='any').reset_index(drop=True)
+hne_filtered = rr9_all_df[hne_cols_to_select].dropna(how='any').reset_index(drop=True)
+
+# Concatenate the two dataframes along the columns
+combined_df = pd.merge(hne_filtered, rnaseq_filtered, on=['Source Name', 'Group'], how='inner')
+groups = combined_df['Group'].unique()
+# Iterate over each group and compute the correlation matrix
+for group in groups.unique():
+    # Filter data for the current group
+    group_indices = combined_df[combined_df['Group'] == group].index
+    hne_group = hne_filtered.loc[group_indices]
+    rnaseq_group = rnaseq_filtered.loc[group_indices]
+    
+    # Concatenate the two dataframes along the columns
+    combined_group_df = pd.concat([hne_group, rnaseq_group], axis=1)
+    
+    # Compute the correlation matrix
+    correlation_matrix = combined_group_df.corr(numeric_only=True)
+    
+    # Create a dendrogram heatmap
+    # plt.figure(figsize=(12, 10))
+    sns.heatmap(
+        correlation_matrix,
+        cmap='coolwarm',
+        annot=False,
+        cbar_kws={'label': 'Correlation Coefficient'}
+    )
+    plt.title(f"Correlation Matrix for Group: {group} for Phenotypically Relevant Genes")
+    plt.show()
+
+######################
+# for predicted genes
+# Ensure HNE and RNASeq data are aligned by their indices
+# common_samples = hne.index.intersection(filtered_rnaseq.index)
+rna_cols_to_select = genes_predictive_of_phenotypes +['Source Name', 'Group']
+hne_cols_to_select = hne.columns.tolist() + ['Source Name', 'Group']
+rnaseq_filtered = rr9_all_df[rna_cols_to_select].dropna(how='any').reset_index(drop=True)
+hne_filtered = rr9_all_df[hne_cols_to_select].dropna(how='any').reset_index(drop=True)
+
+# Concatenate the two dataframes along the columns
+combined_df = pd.merge(hne_filtered, rnaseq_filtered, on=['Source Name', 'Group'], how='inner')
+groups = combined_df['Group'].unique()
+# Iterate over each group and compute the correlation matrix
+for group in groups.unique():
+    # Filter data for the current group
+    group_indices = combined_df[combined_df['Group'] == group].index
+    hne_group = hne_filtered.loc[group_indices]
+    rnaseq_group = rnaseq_filtered.loc[group_indices]
+    
+    # Concatenate the two dataframes along the columns
+    combined_group_df = pd.concat([hne_group, rnaseq_group], axis=1)
+    
+    # Compute the correlation matrix
+    correlation_matrix = combined_group_df.corr(numeric_only=True)
+    
+    # Create a dendrogram heatmap
+    # plt.figure(figsize=(12, 10))
+    sns.heatmap(
+        correlation_matrix,
+        cmap='coolwarm',
+        annot=False,
+        cbar_kws={'label': 'Correlation Coefficient'}
+    )
+    plt.title(f"Correlation Matrix for Group: {group} for Genes Predictive of Phenotypes")
+    plt.show()
+```
+
+
+# Imputation of Relevant Genes from HNE data
+## KNN Imputer
+
+
+
+## Iterative Imputer
+
+
+
+
+## Multiple Imputation by Chained Equation
