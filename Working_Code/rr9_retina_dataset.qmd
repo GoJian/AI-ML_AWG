@@ -54,6 +54,13 @@ import seaborn as sns
 import plotly.express as px
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn.impute import KNNImputer, SimpleImputer
+from feature_engine.imputation import RandomSampleImputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.ensemble import BaggingRegressor
 import requests
 import logging
 import os
@@ -415,84 +422,310 @@ HNE Immunostaining microscopy has data across four different groups (F, GC, Viv,
 To be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and HNE needs to be determined.
 
 ```{python}
-rna_cols_to_select = found_genes +['Source Name', 'Group']
-hne_cols_to_select = hne.columns.tolist() + ['Source Name', 'Group']
-rnaseq_filtered = rr9_all_df[rna_cols_to_select].dropna(how='any').reset_index(drop=True)
-hne_filtered = rr9_all_df[hne_cols_to_select].dropna(how='any').reset_index(drop=True)
+def analyze_correlation(dataset_name, gene_list, rr9_all_df):
+    """
+    Analyze the correlation between a given dataset and a list of genes.
 
-# Concatenate the two dataframes along the columns
-combined_df = pd.merge(hne_filtered, rnaseq_filtered, on=['Source Name', 'Group'], how='inner')
-groups = combined_df['Group'].unique()
-# Iterate over each group and compute the correlation matrix
-for group in groups.unique():
-    # Filter data for the current group
-    group_indices = combined_df[combined_df['Group'] == group].index
-    hne_group = hne_filtered.loc[group_indices]
-    rnaseq_group = rnaseq_filtered.loc[group_indices]
-    
-    # Concatenate the two dataframes along the columns
-    combined_group_df = pd.concat([hne_group, rnaseq_group], axis=1)
-    
-    # Compute the correlation matrix
-    correlation_matrix = combined_group_df.corr(numeric_only=True)
-    
-    # Create a dendrogram heatmap
-    # plt.figure(figsize=(12, 10))
-    sns.heatmap(
-        correlation_matrix,
-        cmap='coolwarm',
-        annot=False,
-        cbar_kws={'label': 'Correlation Coefficient'}
-    )
-    plt.title(f"Correlation Matrix for Group: {group} for Phenotypically Relevant Genes")
-    plt.show()
+    Parameters:
+    - dataset_name: DataFrame, the dataset to analyze (e.g., TUNEL, HNE, etc.)
+    - gene_list: list, the list of genes to analyze
+    - rr9_all_df: DataFrame, the merged RR9 dataset containing all data
 
-######################
-# for predicted genes
-# Ensure HNE and RNASeq data are aligned by their indices
-# common_samples = hne.index.intersection(filtered_rnaseq.index)
-rna_cols_to_select = genes_predictive_of_phenotypes +['Source Name', 'Group']
-hne_cols_to_select = hne.columns.tolist() + ['Source Name', 'Group']
-rnaseq_filtered = rr9_all_df[rna_cols_to_select].dropna(how='any').reset_index(drop=True)
-hne_filtered = rr9_all_df[hne_cols_to_select].dropna(how='any').reset_index(drop=True)
+    Returns:
+    - None, displays heatmaps for correlation matrices
+    """
+    # Select relevant columns
+    rna_cols_to_select = gene_list + ['Source Name', 'Group']
+    dataset_cols_to_select = dataset_name.columns.tolist() + ['Source Name', 'Group']
+    
+    # Filter and drop missing values
+    rnaseq_filtered = rr9_all_df[rna_cols_to_select].dropna(how='any').reset_index(drop=True)
+    dataset_filtered = rr9_all_df[dataset_cols_to_select].dropna(how='any').reset_index(drop=True)
+    
+    # Merge the two datasets
+    combined_df = pd.merge(dataset_filtered, rnaseq_filtered, on=['Source Name', 'Group'], how='inner')
+    groups = combined_df['Group'].unique()
+    
+    # Iterate over each group and compute the correlation matrix
+    for group in groups:
+        # Filter data for the current group
+        group_indices = combined_df[combined_df['Group'] == group].index
+        dataset_group = dataset_filtered.loc[group_indices]
+        rnaseq_group = rnaseq_filtered.loc[group_indices]
+        
+        # Concatenate the two dataframes along the columns
+        combined_group_df = pd.concat([dataset_group, rnaseq_group], axis=1)
+        
+        # Compute the correlation matrix
+        correlation_matrix = combined_group_df.corr(numeric_only=True)
+        
+        # Plot the heatmap
+        sns.heatmap(
+            correlation_matrix,
+            cmap='coolwarm',
+            annot=False,
+            cbar_kws={'label': 'Correlation Coefficient'}
+        )
+        plt.title(f"Correlation Matrix for Group: {group}")
+        plt.show()
 
-# Concatenate the two dataframes along the columns
-combined_df = pd.merge(hne_filtered, rnaseq_filtered, on=['Source Name', 'Group'], how='inner')
-groups = combined_df['Group'].unique()
-# Iterate over each group and compute the correlation matrix
-for group in groups.unique():
-    # Filter data for the current group
-    group_indices = combined_df[combined_df['Group'] == group].index
-    hne_group = hne_filtered.loc[group_indices]
-    rnaseq_group = rnaseq_filtered.loc[group_indices]
-    
-    # Concatenate the two dataframes along the columns
-    combined_group_df = pd.concat([hne_group, rnaseq_group], axis=1)
-    
-    # Compute the correlation matrix
-    correlation_matrix = combined_group_df.corr(numeric_only=True)
-    
-    # Create a dendrogram heatmap
-    # plt.figure(figsize=(12, 10))
-    sns.heatmap(
-        correlation_matrix,
-        cmap='coolwarm',
-        annot=False,
-        cbar_kws={'label': 'Correlation Coefficient'}
-    )
-    plt.title(f"Correlation Matrix for Group: {group} for Genes Predictive of Phenotypes")
-    plt.show()
+analyze_correlation(hne, found_genes, rr9_all_df=rr9_all_df)
+analyze_correlation(hne, genes_predictive_of_phenotypes, rr9_all_df=rr9_all_df)
 ```
 
 
-# Imputation of Relevant Genes from HNE data
+## Data Analysis Correlation Between TUNEL Assay and RNASeq
+The reason to select TUNEL for correlation analysis is that TUNEL assay points seem to separate out cleaner on the PCA plots than HNE data points between different groups.
+TUNEL Assay has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both TUNEL and RNASeq.
+
+To be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and TUNEL needs to be determined.
+
+```{python}
+analyze_correlation(tunel, found_genes, rr9_all_df=rr9_all_df)
+analyze_correlation(tunel, genes_predictive_of_phenotypes, rr9_all_df=rr9_all_df)
+```
+
+
+# Imputation of Relevant Genes from Tunel data
+First step is to see how many genes of the interested gene list do not have data.
+Imputation will be done in two groups: F(light) and not F(light).
+Samples F9 and F11 have RNASeq values, but not TUNEL assay values. 
+```{python}
+flight_relevant_genes = rr9_all_df[rr9_all_df['Group'] == 'F'][found_genes+genes_predictive_of_phenotypes + ['Source Name', 'Group']]
+
+non_flight_relevant_genes = rr9_all_df[rr9_all_df['Group'] != 'F'][found_genes+genes_predictive_of_phenotypes + ['Source Name', 'Group']]
+
+flight_tunel_data = rr9_all_df[rr9_all_df['Group'] == 'F'][tunel.columns.to_list() + ['Source Name', 'Group']]
+non_flight_tunel_data = rr9_all_df[rr9_all_df['Group'] != 'F'][tunel.columns.to_list() + ['Source Name', 'Group']]
+
+merged_flight_data = pd.merge(
+    flight_relevant_genes,
+    flight_tunel_data,
+    on=['Source Name', 'Group'],
+    how='outer'
+)
+
+merged_non_flight_data = pd.merge(
+    non_flight_relevant_genes,
+    non_flight_tunel_data,
+    on=['Source Name', 'Group'],
+    how='outer'
+)
+```
+
+**Establishing a Classifier to Validate Imputation for TUNEL and RNASeq Datasets**
+To validate the effectiveness of imputation, we propose building a binary classifier to distinguish between flight and non-flight samples using the complete RNASeq and TUNEL datasets. After imputing missing values in the TUNEL and RNASeq datasets, we will train the same classifier on the imputed data and compare its performance metrics (e.g., accuracy, precision, recall, F1-score) with those obtained from the complete datasets. This comparison will help assess whether the imputation process preserves the integrity and predictive power of the data.
+
+
+
 ## KNN Imputer
+### Flight Data
+```{python}
+imp_knn5 = KNNImputer(n_neighbors=5, weights='distance')
+imp_df_knn5 = imp_knn5.fit_transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+imp_df_knn5 = pd.DataFrame(imp_df_knn5, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+imp_df_knn5['Source Name'] = merged_flight_data['Source Name']
+imp_df_knn5['Group'] = merged_flight_data['Group']
 
 
+imp_knn2 = KNNImputer(n_neighbors=2, weights='distance')
+imp_df_knn2 = imp_knn2.fit_transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+imp_df_knn2 = pd.DataFrame(imp_df_knn2, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+imp_df_knn2['Source Name'] = merged_flight_data['Source Name']
+imp_df_knn2['Group'] = merged_flight_data['Group']
 
-## Iterative Imputer
+
+fig = px.imshow(imp_df_knn5.corr(numeric_only=True),  text_auto=True)
+fig.show()
+
+fig = px.imshow(imp_df_knn2.corr(numeric_only=True),  text_auto=True)
+fig.show()
+corr_knn_2_matrix = imp_df_knn2.corr(numeric_only=True)
+corr_knn_2_df = corr_knn_2_matrix.unstack().reset_index()
+corr_knn_2_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2',
+                          0:'corr_coef_knn'}, inplace=True)
+```
+
+### Non-Flight Data
+```{python}
+imp_knn5 = KNNImputer(n_neighbors=5, weights='distance')
+imp_df_knn5 = imp_knn5.fit_transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+imp_df_knn5 = pd.DataFrame(imp_df_knn5, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+imp_df_knn5['Source Name'] = merged_non_flight_data['Source Name']
+imp_df_knn5['Group'] = merged_non_flight_data['Group']
 
 
+imp_knn2 = KNNImputer(n_neighbors=2, weights='distance')
+imp_df_knn2 = imp_knn2.fit_transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+imp_df_knn2 = pd.DataFrame(imp_df_knn2, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+imp_df_knn2['Source Name'] = merged_non_flight_data['Source Name']
+imp_df_knn2['Group'] = merged_non_flight_data['Group']
+
+
+fig = px.imshow(imp_df_knn5.corr(numeric_only=True),  text_auto=True)
+fig.show()
+
+fig = px.imshow(imp_df_knn2.corr(numeric_only=True),  text_auto=True)
+fig.show()
+```
+
+
+## Random Sample Imputer
+This is used in cases where there is more than 25-30% of data to be imputed and is also fast compared to others.
+### Flight Data
+```{python}
+rsi = RandomSampleImputer()
+rsi_df = rsi.fit_transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+rsi_df = pd.DataFrame(rsi_df, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+rsi_df['Source Name'] = merged_flight_data['Source Name']
+rsi_df['Group'] = merged_flight_data['Group']
+
+
+fig = px.imshow(rsi_df.corr(numeric_only=True),  text_auto=True)
+fig.show()
+
+corr_rsi_matrix = rsi_df.corr(numeric_only=True)
+corr_rsi_df = corr_rsi_matrix.unstack().reset_index()
+corr_rsi_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2',
+                          0:'corr_coef_rsi'}, inplace=True)
+```
+
+### Non-Flight Data
+```{python}
+rsi = RandomSampleImputer()
+rsi_df = rsi.fit_transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+rsi_df = pd.DataFrame(rsi_df, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+rsi_df['Source Name'] = merged_non_flight_data['Source Name']
+rsi_df['Group'] = merged_non_flight_data['Group']
+fig = px.imshow(rsi_df.corr(numeric_only=True),  text_auto=True)
+fig.show()
+```
 
 
 ## Multiple Imputation by Chained Equation
+
+One can impute missing values by predicting them using other features from the dataset.
+
+The MICE or ‘Multiple Imputations by Chained Equations’, aka, ‘Fully Conditional Specification’ is a popular approach to do this.
+
+Here is a quick intuition (not the exact algorithm)
+![Image](mice.png)
+
+- You basically take the variable that contains missing values as a response ‘Y’ and other variables as predictors ‘X’.
+
+- Build a model with rows where Y is not missing.
+
+- Then predict the missing observations.
+
+Do this multiple times by doing random draws of the data and taking the mean of the predictions.
+
+### Flight Data
+```{python}
+lgbr = HistGradientBoostingRegressor(random_state=2)
+itera_imp = IterativeImputer(random_state=2, initial_strategy='median', estimator=lgbr, max_iter=10, verbose=2)
+itera_imp.fit(merged_flight_data.drop(columns=['Source Name', 'Group']))
+df_imputed = itera_imp.transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+df_imputed = pd.DataFrame(df_imputed, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+df_imputed['Source Name'] = merged_flight_data['Source Name']
+df_imputed['Group'] = merged_flight_data['Group']
+
+corr_matrix = df_imputed.drop(columns=['Source Name','Group']).corr()
+# Plot the heatmap
+# fig, ax = plt.subplots(figsize=(10, 10))
+sns.heatmap(corr_matrix, cmap='coolwarm')
+plt.show()
+
+corr_mice_df = corr_matrix.unstack().reset_index()
+corr_mice_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2',
+                          0:'corr_coef_mice_boost'}, inplace=True)
+```
+
+
+### Non-Flight Data
+```{python}
+lgbr = HistGradientBoostingRegressor(random_state=2)
+itera_imp = IterativeImputer(random_state=2, initial_strategy='median', estimator=lgbr, max_iter=10, verbose=2)
+itera_imp.fit(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+df_imputed = itera_imp.transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+df_imputed = pd.DataFrame(df_imputed, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+df_imputed['Source Name'] = merged_non_flight_data['Source Name']
+df_imputed['Group'] = merged_non_flight_data['Group']
+corr_matrix = df_imputed.drop(columns=['Source Name','Group']).corr()
+
+sns.heatmap(corr_matrix, cmap='coolwarm')
+plt.show()
+
+```
+
+## MICE with Bagging Regressor
+**Flight Data**
+```{python}
+bagger = BaggingRegressor(random_state=2)
+itera_bagger = IterativeImputer(random_state=2, initial_strategy='median', estimator=bagger, max_iter=50, verbose=2, tol=0.01)
+itera_bagger.fit(merged_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed = itera_bagger.transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed = pd.DataFrame(df_bag_imputed, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+df_bag_imputed['Source Name'] = merged_flight_data['Source Name']
+df_bag_imputed['Group'] = merged_flight_data['Group']
+
+corr_matrix = df_bag_imputed.drop(columns=['Source Name','Group']).corr()
+sns.heatmap(corr_matrix, cmap='coolwarm')
+plt.show()
+
+corr_mice_bag_df = corr_matrix.unstack().reset_index()
+corr_mice_bag_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2',
+                          0:'corr_coef_mice_bag'}, inplace=True)
+```
+
+**Non-Flight Data**
+```{python}
+bagger = BaggingRegressor(random_state=2)
+itera_bagger = IterativeImputer(random_state=2, initial_strategy='median', estimator=bagger, max_iter=50, verbose=2, tol=0.01)
+itera_bagger.fit(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed = itera_bagger.transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed = pd.DataFrame(df_bag_imputed, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+df_bag_imputed['Source Name'] = merged_non_flight_data['Source Name']
+df_bag_imputed['Group'] = merged_non_flight_data['Group']
+
+corr_matrix = df_bag_imputed.drop(columns=['Source Name','Group']).corr()
+sns.heatmap(corr_matrix, cmap='coolwarm')
+plt.show()
+```
+
+
+## Checking The Correlations
+```{python}
+corr_orig = merged_flight_data.corr(numeric_only=True)
+corr_orig_df = corr_orig.unstack().reset_index()
+corr_orig_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2',
+                          0:'corr_orig'}, inplace=True)
+
+# Merge all DataFrames on 'para_1' and 'para_2'
+# Merge all DataFrames on 'para_1' and 'para_2'
+merged_corr_df = pd.merge(corr_knn_2_df, corr_rsi_df, on=['para_1', 'para_2'], how='inner')
+merged_corr_df = pd.merge(merged_corr_df, corr_mice_df, on=['para_1', 'para_2'], how='inner')
+merged_corr_df = pd.merge(merged_corr_df, corr_mice_bag_df, on=['para_1', 'para_2'], how='inner')
+merged_corr_df = pd.merge(merged_corr_df, corr_orig_df, on=['para_1', 'para_2'], how='inner')
+
+
+import scipy.stats as stats
+print(stats.spearmanr(merged_corr_df['corr_coef_knn'], merged_corr_df['corr_orig']))
+
+print(stats.spearmanr(merged_corr_df['corr_coef_rsi'], merged_corr_df['corr_orig']))
+
+print(stats.spearmanr(merged_corr_df['corr_coef_mice_boost'], merged_corr_df['corr_orig']))
+
+print(stats.spearmanr(merged_corr_df['corr_coef_mice_bag'], merged_corr_df['corr_orig']))
+```
+
+```{python}
+fig,ax = plt.subplots(1,4, figsize=(50, 10.5))
+sns.scatterplot(x = merged_corr_df['corr_orig'], y = merged_corr_df['corr_coef_knn'],
+                data=merged_corr_df, ax=ax[0])
+sns.scatterplot(x = merged_corr_df['corr_orig'], y = merged_corr_df['corr_coef_rsi'],
+                data=merged_corr_df, ax=ax[1])             
+sns.scatterplot(x = merged_corr_df['corr_orig'], y = merged_corr_df['corr_coef_mice_boost'],
+                data=merged_corr_df, ax=ax[2])
+sns.scatterplot(x = merged_corr_df['corr_orig'], y = merged_corr_df['corr_coef_mice_bag'],
+                data=merged_corr_df, ax=ax[3])
+```
