@@ -2,3 +2,10 @@ Working_Code/data
 Working_Code/.pybiomart.sqlite
 Working_Code/GenAI/kaggle.json
 .DS_Store
+GenAI/data
+GenAI/lightning_logs
+GenAI/__pycache__
+GenAI/runs
+Working_Code/data_folder_images
+Working_Code/.env
+.vscode/settings.json
