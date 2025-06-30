@@ -663,12 +663,12 @@ plt.show()
 bagger = BaggingRegressor(random_state=2)
 itera_bagger = IterativeImputer(random_state=2, initial_strategy='median', estimator=bagger, max_iter=50, verbose=2, tol=0.01)
 itera_bagger.fit(merged_flight_data.drop(columns=['Source Name', 'Group']))
-df_bag_imputed = itera_bagger.transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
-df_bag_imputed = pd.DataFrame(df_bag_imputed, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
-df_bag_imputed['Source Name'] = merged_flight_data['Source Name']
-df_bag_imputed['Group'] = merged_flight_data['Group']
+df_bag_imputed_flight = itera_bagger.transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed_flight = pd.DataFrame(df_bag_imputed_flight, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+df_bag_imputed_flight['Source Name'] = merged_flight_data['Source Name']
+df_bag_imputed_flight['Group'] = merged_flight_data['Group']
 
-corr_matrix = df_bag_imputed.drop(columns=['Source Name','Group']).corr()
+corr_matrix = df_bag_imputed_flight.drop(columns=['Source Name','Group']).corr()
 sns.heatmap(corr_matrix, cmap='coolwarm')
 plt.show()
 
@@ -682,19 +682,21 @@ corr_mice_bag_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2',
 bagger = BaggingRegressor(random_state=2)
 itera_bagger = IterativeImputer(random_state=2, initial_strategy='median', estimator=bagger, max_iter=50, verbose=2, tol=0.01)
 itera_bagger.fit(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
-df_bag_imputed = itera_bagger.transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
-df_bag_imputed = pd.DataFrame(df_bag_imputed, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
-df_bag_imputed['Source Name'] = merged_non_flight_data['Source Name']
-df_bag_imputed['Group'] = merged_non_flight_data['Group']
+df_bag_imputed_non_flight = itera_bagger.transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed_non_flight = pd.DataFrame(df_bag_imputed_non_flight, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+df_bag_imputed_non_flight['Source Name'] = merged_non_flight_data['Source Name']
+df_bag_imputed_non_flight['Group'] = merged_non_flight_data['Group']
 
-corr_matrix = df_bag_imputed.drop(columns=['Source Name','Group']).corr()
+corr_matrix = df_bag_imputed_non_flight.drop(columns=['Source Name','Group']).corr()
 sns.heatmap(corr_matrix, cmap='coolwarm')
 plt.show()
 ```
 
 
 ## Checking The Correlations
+### Flight Data
 ```{python}
+#| echo: False
 corr_orig = merged_flight_data.corr(numeric_only=True)
 corr_orig_df = corr_orig.unstack().reset_index()
 corr_orig_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2',
@@ -719,6 +721,7 @@ print(stats.spearmanr(merged_corr_df['corr_coef_mice_bag'], merged_corr_df['corr
 ```
 
 ```{python}
+#| echo: false
 fig,ax = plt.subplots(1,4, figsize=(50, 10.5))
 sns.scatterplot(x = merged_corr_df['corr_orig'], y = merged_corr_df['corr_coef_knn'],
                 data=merged_corr_df, ax=ax[0])
@@ -728,4 +731,243 @@ sns.scatterplot(x = merged_corr_df['corr_orig'], y = merged_corr_df['corr_coef_m
                 data=merged_corr_df, ax=ax[2])
 sns.scatterplot(x = merged_corr_df['corr_orig'], y = merged_corr_df['corr_coef_mice_bag'],
                 data=merged_corr_df, ax=ax[3])
+```
+
+
+
+## SVM for Validating Imputations
+```{python}
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.metrics import classification_report, accuracy_score
+
+def train_svm_classifier(data, label_col='Group'):
+    """
+    Train an SVM classifier to distinguish between flight and non-flight samples.
+    """
+    # Prepare features and labels
+    X = data.drop(columns=['Source Name', label_col])
+    y = data[label_col].apply(lambda x: 1 if x == 'F' else 0)  # Binary classification: Flight (1) vs Non-Flight (0)
+
+    # Split into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+
+    # Train the SVM classifier
+    svm = SVC(kernel='linear', random_state=42)
+    svm.fit(X_train, y_train)
+
+    # Evaluate the classifier
+    y_pred = svm.predict(X_test)
+    print("Classification Report:")
+    print(classification_report(y_test, y_pred))
+    print("Accuracy:", accuracy_score(y_test, y_pred))
+
+    return svm
+```
+
+```{python}
+# Train and evaluate SVM on RNASeq staining data
+print("SVM on RNA Seq Data:")
+rnaseq_data = rr9_all_df[['Source Name', 'Group'] + rnaseq.columns.tolist()]
+
+# Drop rows with NaN values
+rnaseq_data_cleaned = rnaseq_data.dropna()
+
+train_svm_classifier(rnaseq_data_cleaned)
+```
+
+```{python}
+# Train and evaluate SVM on HNE staining data
+print("SVM on HNE Staining Data:")
+hne_data = rr9_all_df[['Source Name', 'Group'] + hne.columns.tolist()]
+
+# Drop rows with NaN values
+hne_data_cleaned = hne_data.dropna()
+
+train_svm_classifier(hne_data_cleaned)
+```
+
+```{python}
+# Train and evaluate SVM on TUNEL data
+print("SVM on HNE Staining Data:")
+tunel_data = rr9_all_df[['Source Name', 'Group'] + tunel.columns.tolist()]
+
+# Drop rows with NaN values
+tunel_data_cleaned = tunel_data.dropna()
+
+train_svm_classifier(tunel_data_cleaned)
+```
+
+<!-- ```{python}
+# Train and evaluate SVM on KNN-imputed data
+print("SVM on KNN-Imputed Data:")
+knn_imputed_data = pd.concat([imp_df_knn2, imp_df_knn2], axis=0)
+train_svm_classifier(imp_df_knn2)
+
+# Train and evaluate SVM on Random Sample Imputed data
+print("SVM on Random Sample Imputed Data:")
+rsi_imputed_data = pd.concat([rsi_df, rsi_df], axis=0)
+train_svm_classifier(rsi_df)
+
+# Train and evaluate SVM on MICE-imputed data
+print("SVM on MICE-Imputed Data:")
+mice_imputed_data = pd.concat([df_imputed, df_imputed], axis=0)
+train_svm_classifier(df_imputed) -->
+```
+
+```{python}
+# Train and evaluate SVM on MICE with Bagging Regressor-imputed data
+print("SVM on MICE with Bagging Regressor-Imputed Data:")
+mice_bag_imputed_data = pd.concat([df_bag_imputed_flight, df_bag_imputed_non_flight], axis=0)
+
+# Drop rows with NaN values in the 'Group' column
+mice_bag_imputed_data = mice_bag_imputed_data.dropna(subset=['Group'])
+
+train_svm_classifier(mice_bag_imputed_data)
+```
+
+
+## Use embeddings to Impute
+```{python}
+#| echo: False
+import pandas as pd
+
+# Load the file into a DataFrame
+file_path = '/Users/vaishnavinagesh/Desktop/AI-ML_AWG/fft_image_embeddings.csv'  # Replace with the actual file path
+embedding_df = pd.read_csv(file_path)
+
+# Extract mice name, staining technique, and channel into separate columns
+embedding_df[['Channel', 'Mice Name', 'Staining Technique']] = embedding_df['filename'].str.extract(r'/[^/]+/[^/]+/[^/]+/([^/]+)/([^_]+)_[^_]+_([^_]+)_')
+# Replace multiple substrings using regex
+embedding_df['Mice Name'] = (
+    embedding_df['Mice Name']
+    .str.replace('VG', 'CC2', regex=True)
+    .str.replace('V', 'Viv', regex=True)
+    .str.replace('FViv', 'CC1', regex=True)
+)
+# Display the resulting DataFrame
+print(embedding_df[['filename', 'Mice Name', 'Staining Technique', 'Channel']])
+# Rename all numeric columns in embedding_df to have 'embedding_' prefix
+numeric_cols = embedding_df.select_dtypes(include='number').columns
+embedding_df.rename(columns={col: f'embedding_{col}' for col in numeric_cols}, inplace=True)
+# Save the updated DataFrame to a new file if needed
+embedding_df.to_csv('output_file.csv', index=False)
+# Rename values in the "Mice Name" column
+
+embedding_df[['filename', 'Mice Name', 'Staining Technique', 'Channel']]
+rr9_embedding_all_df = pd.merge(rr9_all_df, embedding_df, left_on="Source Name", right_on="Mice Name", how="inner")
+
+# Rename all numeric columns in embedding_df to have 'embedding_' prefix
+numeric_cols = embedding_df.select_dtypes(include='number').columns
+embedding_df.rename(columns={col: f'embedding_{col}' for col in numeric_cols}, inplace=True)
+# Select only columns that contain "embedding_" in their names
+embedding_cols = [col for col in rr9_embedding_all_df.columns if "embedding_" in col]
+embedding_data = rr9_embedding_all_df[embedding_cols]
+
+rnaseq_pca_df, scatter_plt  = perform_pca(rr9_embedding_all_df,dataset_name=embedding_data)
+scatter_plt.show()
+```
+
+## Isolating only Phenotypic Genes for Imputation and further training
+```{python}
+flight_relevant_genes = rr9_embedding_all_df[rr9_embedding_all_df['Group'] == 'F'][found_genes+genes_predictive_of_phenotypes + ['Source Name', 'Group']]
+
+non_flight_relevant_genes = rr9_embedding_all_df[rr9_embedding_all_df['Group'] != 'F'][found_genes+genes_predictive_of_phenotypes + ['Source Name', 'Group']]
+
+# Prepare a dictionary of all relevant dataframes (excluding sc_gp, which is just group info)
+modalities = {
+    'tunel': tunel,
+    'hne': hne,
+    'zo1': zo1,
+    'pecam': pecam,
+    'microct': microct,
+    'pna': pna,
+    'tonometry': tonometry,
+    'protein': protein
+}
+
+# For each modality, get the columns for flight and non-flight data
+flight_data_dict = {}
+non_flight_data_dict = {}
+
+for name, df in modalities.items():
+    cols = df.columns.to_list() + ['Source Name', 'Group']
+    flight_data_dict[name] = rr9_embedding_all_df[rr9_embedding_all_df['Group'] == 'F'][cols]
+    non_flight_data_dict[name] = rr9_embedding_all_df[rr9_embedding_all_df['Group'] != 'F'][cols]
+
+# Example: flight_data_dict['tunel'] gives flight samples for tunel data
+# To concatenate all modalities for flight and non-flight:
+flight_all_modalities = pd.concat(list(flight_data_dict.values()), axis=1)
+non_flight_all_modalities = pd.concat(list(non_flight_data_dict.values()), axis=1)
+
+# Remove duplicate columns (from overlapping 'Source Name' and 'Group')
+flight_all_modalities = flight_all_modalities.loc[:,~flight_all_modalities.columns.duplicated()]
+non_flight_all_modalities = non_flight_all_modalities.loc[:,~non_flight_all_modalities.columns.duplicated()]
+
+
+merged_flight_data = pd.merge(
+    flight_relevant_genes,
+    flight_all_modalities,
+    on=['Source Name', 'Group'],
+    how='outer'
+)
+
+merged_non_flight_data = pd.merge(
+    non_flight_relevant_genes,
+    non_flight_all_modalities,
+    on=['Source Name', 'Group'],
+    how='outer'
+)
+
+```
+
+## Bagging Regressor for Final Imputation from Embeddings Flight Data
+```{python}
+bagger = BaggingRegressor(random_state=2)
+itera_bagger = IterativeImputer(random_state=2, initial_strategy='median', estimator=bagger, max_iter=50, verbose=2, tol=0.01)
+# Before fitting, get columns that are NOT all NaN
+cols_to_impute = merged_flight_data.drop(columns=['Source Name', 'Group']).columns[
+    merged_flight_data.drop(columns=['Source Name', 'Group']).notna().any()
+].tolist()
+
+# Fit and transform only these columns
+itera_bagger.fit(merged_flight_data[cols_to_impute])
+df_bag_imputed_flight = itera_bagger.transform(merged_flight_data[cols_to_impute])
+df_bag_imputed_flight = pd.DataFrame(df_bag_imputed_flight, columns=cols_to_impute)
+df_bag_imputed_flight['Source Name'] = merged_flight_data['Source Name']
+df_bag_imputed_flight['Group'] = merged_flight_data['Group']
+
+corr_matrix = df_bag_imputed_flight.drop(columns=['Source Name','Group']).corr()
+sns.heatmap(corr_matrix, cmap='coolwarm')
+plt.show()
+
+corr_mice_bag_df = corr_matrix.unstack().reset_index()
+corr_mice_bag_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2',
+                          0:'corr_coef_mice_bag'}, inplace=True)
+
+```
+
+**Non-Flight Data**
+```{python}
+bagger = BaggingRegressor(random_state=2)
+itera_bagger = IterativeImputer(random_state=2, initial_strategy='median', estimator=bagger, max_iter=50, verbose=2, tol=0.01)
+# Before fitting, get columns that are NOT all NaN
+cols_to_impute = merged_flight_data.drop(columns=['Source Name', 'Group']).columns[
+    merged_flight_data.drop(columns=['Source Name', 'Group']).notna().any()
+].tolist()
+
+# Fit and transform only these columns
+itera_bagger.fit(merged_non_flight_data[cols_to_impute])
+df_bag_imputed_non_flight = itera_bagger.transform(merged_non_flight_data[cols_to_impute])
+df_bag_imputed_non_flight = pd.DataFrame(df_bag_imputed_non_flight, columns=cols_to_impute)
+df_bag_imputed_non_flight['Source Name'] = merged_non_flight_data['Source Name']
+df_bag_imputed_non_flight['Group'] = merged_non_flight_data['Group']
+corr_matrix = df_bag_imputed_non_flight.drop(columns=['Source Name','Group']).corr()
+sns.heatmap(corr_matrix, cmap='coolwarm')
+plt.show()
+```
+
+```{python}
+combined_df = pd.concat([df_bag_imputed_non_flight, df_bag_imputed_flight], ignore_index=True)
+combined_df.to_csv('imputed.csv', index=False)
 ```
