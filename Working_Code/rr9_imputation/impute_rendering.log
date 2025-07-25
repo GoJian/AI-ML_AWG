@@ -1,0 +1,26 @@
+
+Starting python3 kernel...
+Done
+
+
+Executing 'impute.quarto_ipynb'
+
+  Cell 1/10: 'Import libraries'.....................................
+Done
+
+  Cell 2/10: 'Read merged_flight_data and merged_non_flight_data'...
+Done
+
+  Cell 3/10: 'KNN 5 neigbors imputer Flight Data'...................
+Done
+
+  Cell 4/10: 'KNN 2 neigbors imputer Non Flight Data'...............
+Done
+
+  Cell 5/10: 'Random Sample Imputer Flight Data'....................
+Done
+
+  Cell 6/10: 'Random Sample Imputer Non Flight Data'................
+Done
+
+  Cell 7/10: 'MICE Imputer with LGBR Flight Data'...................
