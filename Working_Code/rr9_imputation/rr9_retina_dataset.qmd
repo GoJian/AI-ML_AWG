@@ -1,0 +1,549 @@
+---
+title: 'RR9 Retina Dataset Integration'
+author: 'Lauren Sanders, Jian Gong, Vaishnavi Nagesh'
+format:
+    html:
+        toc: true
+        toc-depth: 5
+        code-fold: true
+        page-layout: full
+        code-overflow: wrap 
+        anchor-sections: true
+---
+
+## Digital Twin Project Description
+Space biology confronts a critical obstacle: the challenge of incomplete data due to the logistical complexities and high costs of space missions. Addressing this issue, this research presents strategies that integrate AI and digital twin technology to overcome the limitations posed by sparse datasets in space biology research.
+
+By presenting a cohesive strategy that combines synthetic data generation, automatic labeling, and advanced machine learning with digital twins, we showcase an application to the RR9 dataset at OSDR. This research aims to overcome the challenge of data scarcity in space biology, thereby forging a way to unlock insights into the potential of life beyond Earth.
+
+## RR9 Background
+The Rodent Research 9 payload consisted of three space biology experiments designed to examine impacts of long-duration spaceflight on visual impairment and joint tissue degradation that affect astronauts.
+
+| Investigation | Purpose | Experiments |
+|---|---|---|
+| Investigation 1 | Effects of microgravity on fluid shifts and increased fluid pressures that occur in the head. | 1. To determine whether spaceflight on the ISS alters rodent basilar artery spontaneous tone, myogenic and KCl (Potassium Chloride)-evoked vasoconstriction, mechanical stiffness and gross structure.<br> 2. To estimate whether spaceflight on the ISS alters the blood-brain barrier in rodents, as indicated by ultrastructural examination of the junctional complex of the cerebral capillary endothelium.<br> 3. To determine whether spaceflight on the ISS alters rodent basal vein (inside cranium) and jugular vein (outside cranium) spontaneous tone, myogenic and KCl-evoked constriction, distension, and gross structure.<br> 4. To determine whether spaceflight on the ISS alters the ability of the cervical lymphatics to modulate lymph flow, and thus, regulate cerebral fluid homeostasis. |
+| Investigation 2 | Impact of spaceflight on the vessels that supply blood to the eyes. | 1. Define the relationships between spaceflight condition-induced oxidative stress in reactive oxygen species (ROS) expression and retinal vascular remodeling and BRB function in mice return to Earth alive.<br> 2. Determine whether spaceflight condition-induced oxidative damage in retina is mediated through photoreceptor mitochondrial ROS production. |
+| Investigation 3 | Extent of knee and hip joint degradation caused by prolonged exposure to weightlessness. | 1. Determine the extent of knee and hip joint degradation in mice after 30 days of spaceflight on the ISS.<br> 2. Use the DigiGait System to assess gait patterns before and after returning from the ISS. |
+
+We are interested in the Retinal data and all things related to Eye. So, all the experiments related to Investigation 1 and 2 will be studied here. Below is the table of all OSD identifiers related to above investigations obtained from https://osdr.nasa.gov/bio/repo/data/payloads/RR-9
+
+| Identifier 	| Title 	| Factors 	| Assay Types 	|
+|---	|---	|---	|---	|
+| [OSD-557](https://osdr.nasa.gov/bio/repo/data/studies/OSD-557) 	| Spaceflight influences gene expression, photoreceptor integrity, and oxidative stress related damage in the murine retina (RR-9) 	| Spaceflight 	| Bone Microstructure<br>Molecular Cellular Imaging<br>histology 	|
+| [OSD-568](https://osdr.nasa.gov/bio/repo/data/studies/OSD-568) 	| Characterization of mouse ocular responses (Microscopy) to a 35-day (RR-9) spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations 	| Spaceflight 	| Molecular Cellular Imaging 	|
+| [OSD-715](https://osdr.nasa.gov/bio/repo/data/studies/OSD-715) 	| Characterization of mouse ocular response to a 35-day spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations - Proteomics data 	| Spaceflight 	| protein expression profiling 	|
+| [OSD-255](https://osdr.nasa.gov/bio/repo/data/studies/OSD-255) 	| Spaceflight influences gene expression, photoreceptor integrity, and oxidative stress-related damage in the murine retina 	| Spaceflight 	| transcription profiling 	|
+| [OS-140](https://osdr.nasa.gov/bio/repo/data/experiments/OS-140) 	| Space Flight Environment Induces Remodeling of Vascular Network and Glia-Vascular Communication in Mouse Retina 	| Spaceflight 	|  	|
+| [OSD-583](https://osdr.nasa.gov/bio/repo/data/studies/OSD-583) 	| Characterization of mouse ocular responses (intraocular pressure) to a 35-day (RR-9) spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations 	| Spaceflight 	| Tonometry 	|
+
+
+The purpose of this notebook is to combine all retina data from the [Rodent Research 9](https://osdr.nasa.gov/bio/repo/data/payloads/RR-9) (RR9) mission from the [NASA Open Science Data Repository](https://www.nasa.gov/osdr/ (OSDR)), perform exploratory data analysis, impute missing data and train a digital twin.
+
+**Original Author:** Lauren Sanders
+
+**Additional Author(s):** Jian Gong, Vaishnavi Nagesh
+
+```{python}
+#| label: Import libraries
+#| echo: False
+import pandas as pd
+from itables import show
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import KNNImputer, SimpleImputer
+from feature_engine.imputation import RandomSampleImputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.ensemble import BaggingRegressor
+import requests
+import logging
+import os
+
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+```
+
+```{python}
+#| echo: False
+#| label: Logging
+logger = logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+```
+```{python}
+#| echo: False
+#| label: Global variables
+GSM_DICT = {
+    "GSM3932702": "F11",
+    "GSM3932703": "F15",
+    "GSM3932704": "F16",
+    "GSM3932705": "F17",
+    "GSM3932706": "F18",
+    "GSM3932707": "F19",
+    "GSM3932708": "F20",
+    "GSM3932694": "GC11",
+    "GSM3932695": "GC15",
+    "GSM3932696": "GC16",
+    "GSM3932697": "GC17",
+    "GSM3932698": "GC18",
+    "GSM3932699": "GC19",
+    "GSM3932700": "GC20",
+    "GSM3932693": "GC9",
+    "GSM3932701": "F9"
+}
+
+```
+
+## Load Data
+We are downloading all the relevant data as shown in the the table below.
+```{python}
+#| label: Load data Cell
+#| echo: False
+data_to_download=pd.DataFrame({'Data Type':['rnaseq', 'Zo-1(ImmunoStaining Microcopy)', 'TUNEL Assay', 'PECAM(ImmunoStaining Microscopy)', 'microct(Micro CT)', 'PNA(ImmunoStaining Microscopy)', 'HNE(ImmunoStaining Microscopy)', 'Tonometry', 'Protein(Proteomics)'],
+'Data Links':['https://osdr.nasa.gov/geode-py/ws/studies/OSD-255/download?source=datamanager&file=GLDS-255_rna_seq_Normalized_Counts.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_Zo-1tr_TRANSFORMED.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_TUNELtr_TRANSFORMED.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_PECAMtr_TRANSFORMED.csv', 'https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_microCT_MicroCT_Transformed_Reusable_Results.csv', 'https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_immunostaining_microscopy_PNAtr_Transformed_Reusable_Results.csv',
+'https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_immunostaining_microscopy_HNEtr_Transformed_Reusable_Results.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-583/download?source=datamanager&file=LSDS-16_tonometry_maoTRANSFORMED.csv','https://osdr.nasa.gov/geode-py/ws/studies/OSD-715/download?source=datamanager&file=GLDS-639_proteomics_01_Mao_RR9_Retina_092018_MQ_iBAQ.xlsx']
+})
+show(data_to_download)
+```
+
+
+```{python}
+#| label: Download all relevant data
+#| cache: True
+#| echo: False
+## Using the Data API from the OSDR Public API
+## Documentation: https://www.nasa.gov/reference/osdr-public-api/
+
+rnaseq = pd.read_csv('https://osdr.nasa.gov/geode-py/ws/studies/OSD-255/download?source=datamanager&file=GLDS-255_rna_seq_Normalized_Counts.csv', index_col=0).transpose()
+rnaseq['Source Name'] = rnaseq.index.map(GSM_DICT)
+
+zo1 = pd.read_csv('https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_Zo-1tr_TRANSFORMED.csv')
+zo1['Source Name'] = ['F15', 'F16', 'F17', 'F18', 'F19', 'F20', 'GC15', 'GC16', 'GC17', 'GC18', 'GC19', 'GC20']
+
+
+tunel = pd.read_csv('https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_TUNELtr_TRANSFORMED.csv')
+tunel['Source Name'] = ['F15', 'F16', 'F17', 'F18', 'F19', 'F20', 'GC15', 'GC16', 'GC17', 'GC18', 'GC19', 'GC20', 'CC2_15', 'CC2_16', 'CC2_17', 'CC2_18', 'CC2_20', 'Viv15', 'Viv16', 'Viv17', 'Viv18', 'Viv19', 'Viv20'] #rename VG to CC2 and V to Viv for consistency
+
+pecam = pd.read_csv('https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&file=LSDS-5_immunostaining_microscopy_PECAMtr_TRANSFORMED.csv')#['Source Name']=['F15','F16','F17','F18','F19','F20','GC15','GC16','GC17','GC18','GC19']
+pecam['Source Name'] = ['F15', 'F16', 'F17', 'F18', 'F19', 'F20', 'GC15', 'GC16', 'GC17', 'GC18', 'GC19']
+
+
+microct = pd.read_csv('https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_microCT_MicroCT_Transformed_Reusable_Results.csv') #NOTE: OSD-557 also has raw image files for immunostaining and H&E
+microct['Source Name'] = ['F10', 'F12', 'F13', 'F14', 'Viv10', 'Viv12', 'Viv13', 'Viv14', 'GC10', 'GC11', 'GC13', 'GC14'] #rename V to Viv
+
+pna = pd.read_csv('https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_immunostaining_microscopy_PNAtr_Transformed_Reusable_Results.csv')
+
+
+hne = pd.read_csv('https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&file=LSDS-1_immunostaining_microscopy_HNEtr_Transformed_Reusable_Results.csv')
+hne['Source Name'] = ["F15", "F16", "F17", "F18", "F19", "F20", "GC15", "GC16", "GC17", "GC18", "GC19", "Viv15", "Viv16", "Viv17", "Viv18", "Viv19", "Viv20", "CC2_15", "CC2_16", "CC2_17", "CC2_18", "CC2_19", "CC2_20"]
+
+tonometry = pd.read_csv('https://osdr.nasa.gov/geode-py/ws/studies/OSD-583/download?source=datamanager&file=LSDS-16_tonometry_maoTRANSFORMED.csv')
+tonometry['Source Name'] = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", "F19", "F20", "CC1_1", "CC1_2", "CC1_3", "CC1_4", "CC1_5", "CC1_6", "CC1_7", "CC1_8", "CC1_9", "CC1_10", "CC1_11", "CC1_12", "CC1_13", "CC1_14", "CC1_15", "CC1_16", "CC1_17", "CC1_18", "CC1_19", "CC1_20", "GC1", "GC2", "GC3", "GC4", "GC5", "GC6", "GC7", "GC8", "GC9", "GC10", "GC11", "GC12", "GC13", "GC14", "GC15", "GC16", "GC17", "GC18", "GC19", "GC20", "Viv1", "Viv2", "Viv3", "Viv4", "Viv5", "Viv6", "Viv7", "Viv8", "Viv9", "Viv10", "Viv11", "Viv12", "Viv13", "Viv14", "Viv15", "Viv16", "Viv17", "Viv18", "Viv19", "Viv20", "CC2_1", "CC2_2", "CC2_3", "CC2_4", "CC2_5", "CC2_6", "CC2_7", "CC2_8", "CC2_9", "CC2_10", "CC2_11", "CC2_12", "CC2_13", "CC2_14", "CC2_15", "CC2_16", "CC2_17", "CC2_18", "CC2_19", "CC2_20"] #rename "FViv" to "CC1"  for consistency
+
+protein = pd.read_excel('https://osdr.nasa.gov/geode-py/ws/studies/OSD-715/download?source=datamanager&file=GLDS-639_proteomics_01_Mao_RR9_Retina_092018_MQ_iBAQ.xlsx', sheet_name='Combat corrected', index_col=0).transpose()
+protein = protein.drop(protein.columns[[0, 1, 2, 4, 5, 6]], axis=1).rename(columns={"Sample": "Source Name"}).reset_index().drop(columns=['index']) # remove some Excel formatting
+protein = protein.set_index('Source Name').apply(pd.to_numeric, errors='coerce') # convert to numeric instead of dtype "object"
+protein['Source Name'] = protein.index
+protein.reset_index(drop=True, inplace=True)
+
+sc_gp = pd.DataFrame({'Source Name': ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14", "F15", "F16", "F17", "F18", "F19", "F20", "CC1_1", "CC1_2", "CC1_3", "CC1_4", "CC1_5", "CC1_6", "CC1_7", "CC1_8", "CC1_9", "CC1_10", "CC1_11", "CC1_12", "CC1_13", "CC1_14", "CC1_15", "CC1_16", "CC1_17", "CC1_18", "CC1_19", "CC1_20", "GC1", "GC2", "GC3", "GC4", "GC5", "GC6", "GC7", "GC8", "GC9", "GC10", "GC11", "GC12", "GC13", "GC14", "GC15", "GC16", "GC17", "GC18", "GC19", "GC20", "Viv1", "Viv2", "Viv3", "Viv4", "Viv5", "Viv6", "Viv7", "Viv8", "Viv9", "Viv10", "Viv11", "Viv12", "Viv13", "Viv14", "Viv15", "Viv16", "Viv17", "Viv18", "Viv19", "Viv20", "CC2_1", "CC2_2", "CC2_3", "CC2_4", "CC2_5", "CC2_6", "CC2_7", "CC2_8", "CC2_9", "CC2_10", "CC2_11", "CC2_12", "CC2_13", "CC2_14", "CC2_15", "CC2_16", "CC2_17", "CC2_18", "CC2_19", "CC2_20"],
+'Group': ["F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "F", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "CC1", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "GC", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "Viv", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2", "CC2"]})
+
+```
+
+
+
+## Data Exploration and Validation
+The below table shows number of features in each dataset that constitute the RR9 multi-modal data. This is useful in identifying the maximum number of PCA components required to explain the cumulative variance in the dataset.
+```{python}
+#| echo: False
+#| label: Summarize Data
+# Drop "Sample Name" and a couple other irrelevant columns
+zo1.drop(columns=['Sample_Name'], inplace=True)
+tunel.drop(columns=['Sample_Name'], inplace=True)
+pecam.drop(columns=['Sample_Name'], inplace=True)
+microct.drop(columns=['Sample Name', 'Treatment'], inplace=True)
+pna.drop(columns=['Sample Name', 'Treatment'], inplace=True)
+hne.drop(columns=['Sample Name'], inplace=True)
+tonometry.drop(columns=['Sample Name', 'Factor Value: Spaceflight', 'time_Start', 'Time_End'], inplace=True)
+
+# Add suffix to all physiological data column names to avoid duplicates (rnaseq and protein should be unique)
+zo1.columns = [col + '_zo1' if col != 'Source Name' else col for col in zo1.columns]
+tunel.columns = [col + '_tunel' if col != 'Source Name' else col for col in tunel.columns]
+pecam.columns = [col + '_pecam' if col != 'Source Name' else col for col in pecam.columns]
+microct.columns = [col + '_microct' if col != 'Source Name' else col for col in microct.columns]
+pna.columns = [col + '_pna' if col != 'Source Name' else col for col in pna.columns]
+hne.columns = [col + '_hne' if col != 'Source Name' else col for col in hne.columns]
+tonometry.columns = [col + '_tonometry' if col != 'Source Name' else col for col in tonometry.columns]
+
+dfs = [tonometry,rnaseq, protein, zo1, tunel, pecam, microct, pna, hne, sc_gp]
+
+# Convert 'Source Name' to string in all DataFrames to avoid dtype conflicts
+for df in dfs:
+    df['Source Name'] = df['Source Name'].astype(str)
+    df.set_index('Source Name',inplace=True)
+
+# Merge all DataFrames on "Source Name" column
+rr9_all_df = pd.concat(dfs, axis=1, join='outer')
+rr9_all_df['Source Name'] = rr9_all_df.index
+rr9_all_df = rr9_all_df.reset_index(drop=True)
+rr9_all_df['Group'] = rr9_all_df['Group'].astype('category')
+
+shape_summary_df = pd.DataFrame({'Data':['tonometry','rnaseq', 'protein', 'zo1', 'tunel', 'pecam', 'microct', 'pna', 'hne'],
+'Rows X Features':[tonometry.shape,rnaseq.shape, protein.shape, zo1.shape, tunel.shape, pecam.shape, microct.shape, pna.shape, hne.shape]})
+show(shape_summary_df)
+```
+
+
+## Summary of the Merged Data frame
+```{python}
+#| echo: False
+#| label: Summarize Data Merged Data Frame
+rr9_all_df.describe(include='all')
+cat_cols = {
+    'tonometry':tonometry.columns.tolist(),
+    'rnaseq':rnaseq.columns.tolist(),
+    'protein':protein.columns.tolist(),
+    'zo1':zo1.columns.tolist(),
+    'tunel':tunel.columns.tolist(),
+    'pecam':pecam.columns.tolist(),
+    'microct':microct.columns.tolist(),
+    'pna':pna.columns.tolist(),
+    'hne':hne.columns.tolist() 
+}
+
+# Build a mapping for all columns in your categories
+col_to_category = {col: cat for cat, cols in cat_cols.items() for col in cols}
+
+# Convert mapping to a Pandas Series (index: column names, values: category names)
+category_series = pd.Series(col_to_category)
+
+# Calculate the fraction of non-missing values for each category per row
+category_presence = rr9_all_df.notnull().groupby(category_series, axis=1).any()
+
+
+plt.figure(figsize=(15,5))
+ax = sns.heatmap(category_presence.T,cmap='Blues', cbar=True, linewidths=1, linecolor="black")
+
+ax.set_xticks(range(len(rr9_all_df['Source Name'])))
+ax.set_xticklabels(rr9_all_df['Source Name'], rotation=90, fontsize=6, fontweight ="bold")
+ax.set_xlabel("Sample Names")
+ax.set_ylabel("Categories")
+plt.title("Heatmap of Data Availability per Category")
+plt.show()
+```
+
+
+```{python}
+#| echo: False
+#| label: PCA Function Definition
+# Prior to running PCA, all the tonometry data needs to be normalized.
+def perform_pca(df,ideal_pca_components=2, dataset_name=tonometry):
+    '''
+    The function takes input of the name of the dataset based on list defined above. If the name is not in the name of the dataset in dfs, then the function will error out.
+    The idea of this function is to do a PCA analysis the different modalities of the data within the rr9 dataset against different groups available.
+    '''
+    cols_to_select = dataset_name.columns.tolist() + ['Source Name', 'Group']
+    dataset_cols = dataset_name.columns.tolist()
+    subset_df = df[cols_to_select].dropna(how='any').reset_index(drop=True)
+    std_scaler = StandardScaler()
+    scaled_df = std_scaler.fit_transform(subset_df[dataset_cols])
+
+    pca = PCA(random_state=2).fit(scaled_df)
+    n = pca.n_components_
+    grid = np.arange(1, n + 1)
+    evr = pca.explained_variance_ratio_
+   
+    fig, axs = plt.subplots(1, 2)
+    axs[0].bar(grid, evr)
+    axs[0].set(
+        xlabel="Component", title="% Explained Variance", ylim=(0.0, round(10*max(evr)+0.5)/10)
+    )
+    axs[0].title.set_weight('bold')
+    axs[0].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    axs[0].set_xticks(grid)
+    axs[0].set_xticklabels(grid)
+
+    # Cumulative Variance
+    cv = np.cumsum(evr)
+    ideal_pca_components = np.argmax(cv > 0.95) + 1
+    axs[1].plot(grid, cv, "o-")
+    axs[1].set(
+        xlabel="Component", title=f"% Cumulative Variance, setting n_components={ideal_pca_components}", ylim=(0.0, 1.01)
+    )
+    axs[1].title.set_weight('bold')
+    axs[1].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    axs[1].set_xticks(grid)
+    axs[1].set_xticklabels(grid)
+
+    # Cumulative variance value on the 2nd plot
+    axs[1].annotate(f'CV={cv[-1]:.3f}', (grid[-1], cv[-1]), textcoords="offset points", xytext=(-15,-10), ha='center')
+
+    # Set up figure
+    fig.set(figwidth=10)
+    
+    pca_final = PCA(n_components=ideal_pca_components, random_state=2)
+
+    pca_df = pd.DataFrame(pca_final.fit_transform(scaled_df))
+    pca_df.columns = ["PCA_" + str(i) for i in range(1, ideal_pca_components+1)]
+    pca_df = pd.concat([subset_df[['Source Name', 'Group']], pca_df], axis=1)
+
+    if ideal_pca_components>2:
+        scatter_plot = px.scatter_3d(pca_df, x='PCA_1', y='PCA_2', z='PCA_3', color='Group', title=f'PCA Projections Against Groups')
+    else:
+        scatter_plot = px.scatter(pca_df, x='PCA_1', y='PCA_2', color='Group', title=f'PCA Projections Against Groups')
+        scatter_plot.update_traces(marker=dict(size=12,
+                              line=dict(width=2,
+                                        color='DarkSlateGrey')),
+                  selector=dict(mode='markers'))
+
+    return pca_df, scatter_plot    
+```
+
+## PCA on Different Categories of Datasets
+
+#### PCA on RNASeq
+```{python}
+#| echo: False
+#| label: PCA on RNASeq
+rnaseq_pca_df, scatter_plt  = perform_pca(rr9_all_df,dataset_name=rnaseq)
+scatter_plt.show()
+```
+
+#### PCA on RNASeq for Only Predictive Genes for Phenotype
+```{python}
+#| label: PCA on RNASeq of Predictive Genes
+#| echo: false
+genes_predictive_of_phenotypes = [
+    'ENSMUSG00000021185',
+    'ENSMUSG00000021432',
+    'ENSMUSG00000021712',
+    'ENSMUSG00000023484',
+    'ENSMUSG00000025484',
+    'ENSMUSG00000026768',
+    'ENSMUSG00000028184',
+    'ENSMUSG00000028423',
+    'ENSMUSG00000029499',
+    'ENSMUSG00000036636',
+    'ENSMUSG00000039994',
+    'ENSMUSG00000041685',
+    'ENSMUSG00000042190',
+    'ENSMUSG00000045318',
+    'ENSMUSG00000050538',
+    'ENSMUSG00000052373',
+    'ENSMUSG00000068250',
+    'ENSMUSG00000068394',
+    'ENSMUSG00000070822',
+    'ENSMUSG00000073879',
+    'ENSMUSG00000084408',
+    'ENSMUSG00000097061',
+    'ENSMUSG00000097180',
+    'ENSMUSG00000106147',
+    'ENSMUSG00000107195',
+    'ENSMUSG00000110357',
+]
+set(genes_predictive_of_phenotypes).issubset(rnaseq.columns.to_list())
+
+# Filter the RNASeq dataset to include only the genes predictive of phenotypes
+filtered_rnaseq = rnaseq[genes_predictive_of_phenotypes]
+
+# Perform PCA on the filtered dataset
+phenotype_rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=filtered_rnaseq)
+scatter_plt.show()
+```
+
+#### PCA on Phenotype Related RNASeq Genes
+```{python}
+#| label: PCA on Phenotype Related Genes RNASeq
+#| echo: false
+# Read the gene list from the file
+with open('pheno_genes.txt', 'r') as file:
+    pheno_genes = [line.strip() for line in file]
+
+# Filter the gene list to include only those present in the RNASeq dataset
+found_genes = [gene for gene in pheno_genes if gene in rnaseq.columns]
+print(len(found_genes), "genes found in the RNASeq dataset.")
+
+# Filter the RNASeq dataset to include only the genes predictive of phenotypes
+filtered_pheno_genes_rnaseq = rnaseq[found_genes]
+
+# Perform PCA on the filtered dataset
+pheno_genes_rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=filtered_pheno_genes_rnaseq)
+scatter_plt.show()
+```
+
+
+#### PCA on Proteomics
+```{python}
+#| echo: False
+#| label: PCA on Proteomics
+protein_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=protein)
+scatter_plt
+```
+
+#### PCA on TUNEL Assay
+```{python}
+#| echo: False
+#| label: PCA on TUNEL Assay
+tunel_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=tunel)
+scatter_plt
+# protein, zo1, tunel, pecam, microct, pna, hne
+```
+
+#### PCA on HNE Immunostaining Micoscopy
+```{python}
+#| echo: False
+#| label: PCA on HNE Data
+hne_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=hne)
+
+scatter_plt.show()
+
+```
+
+
+#### PCA on Micro CT
+```{python}
+#| echo: False
+#| label: PCA on Micro CT Data
+miroct_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=microct)
+
+scatter_plt.show()
+
+```
+
+#### PCA on Combined Immunostaining Micoscopy data from Zo-1, PECAM, PNA and HNE
+Zo-1, PECAM, PNA and HNE are all immunostaining microscopy. It would be useful to see if combining them all helps in better separation between the groups.
+```{python}
+#| echo: False
+#| label: PCA by Combining all Immunostaining microscopy data
+immuno_mic = pd.concat([zo1, pecam, pna, hne], axis=1, join='outer')
+immuno_mic_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=immuno_mic)
+
+scatter_plt.show()
+```
+
+From the PCA analysis of different datasets, it seems like there is fair separation betwee flight and other groups. However, there isn't sufficient data to show separation between GC, Viv and CC groups.
+
+
+## Data Analysis Correlation Between HNE and RNASeq
+HNE Immunostaining microscopy has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both HNE and RNASeq.
+
+To be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and HNE needs to be determined.
+
+```{python}
+#| label: Function definition for Analyzing Correlation
+#| echo: false
+def analyze_correlation(dataset_name, gene_list, rr9_all_df):
+    """
+    Analyze the correlation between a given dataset and a list of genes.
+
+    Parameters:
+    - dataset_name: DataFrame, the dataset to analyze (e.g., TUNEL, HNE, etc.)
+    - gene_list: list, the list of genes to analyze
+    - rr9_all_df: DataFrame, the merged RR9 dataset containing all data
+
+    Returns:
+    - None, displays heatmaps for correlation matrices
+    """
+    # Select relevant columns
+    rna_cols_to_select = gene_list + ['Source Name', 'Group']
+    dataset_cols_to_select = dataset_name.columns.tolist() + ['Source Name', 'Group']
+    
+    # Filter and drop missing values
+    rnaseq_filtered = rr9_all_df[rna_cols_to_select].dropna(how='any').reset_index(drop=True)
+    dataset_filtered = rr9_all_df[dataset_cols_to_select].dropna(how='any').reset_index(drop=True)
+    
+    # Merge the two datasets
+    combined_df = pd.merge(dataset_filtered, rnaseq_filtered, on=['Source Name', 'Group'], how='inner')
+    groups = combined_df['Group'].unique()
+    
+    # Iterate over each group and compute the correlation matrix
+    for group in groups:
+        # Filter data for the current group
+        group_indices = combined_df[combined_df['Group'] == group].index
+        dataset_group = dataset_filtered.loc[group_indices]
+        rnaseq_group = rnaseq_filtered.loc[group_indices]
+        
+        # Concatenate the two dataframes along the columns
+        combined_group_df = pd.concat([dataset_group, rnaseq_group], axis=1)
+        
+        # Compute the correlation matrix
+        correlation_matrix = combined_group_df.corr(numeric_only=True)
+        
+        # Plot the heatmap
+        sns.heatmap(
+            correlation_matrix,
+            cmap='coolwarm',
+            annot=False,
+            cbar_kws={'label': 'Correlation Coefficient'}
+        )
+        plt.title(f"Correlation Matrix for Group: {group}")
+        plt.show()
+
+analyze_correlation(hne, found_genes, rr9_all_df=rr9_all_df)
+analyze_correlation(hne, genes_predictive_of_phenotypes, rr9_all_df=rr9_all_df)
+```
+
+
+## Data Analysis Correlation Between TUNEL Assay and RNASeq
+The reason to select TUNEL for correlation analysis is that TUNEL assay points seem to separate out cleaner on the PCA plots than HNE data points between different groups.
+TUNEL Assay has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both TUNEL and RNASeq.
+
+To be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and TUNEL needs to be determined.
+
+```{python}
+#| label: Correlation Analysis on Found Genes and TUNEL data
+#| echo: false
+analyze_correlation(tunel, found_genes, rr9_all_df=rr9_all_df)
+analyze_correlation(tunel, genes_predictive_of_phenotypes, rr9_all_df=rr9_all_df)
+```
+
+
+# Imputation of Relevant Genes from Tunel data
+First step is to see how many genes of the interested gene list do not have data.
+Imputation will be done in two groups: F(light) and not F(light).
+Samples F9 and F11 have RNASeq values, but not TUNEL assay values. 
+```{python}
+#| echo: false
+#| label: Separating Flight and Non Flight Data
+flight_relevant_genes = rr9_all_df[rr9_all_df['Group'] == 'F'][found_genes+genes_predictive_of_phenotypes + ['Source Name', 'Group']]
+
+non_flight_relevant_genes = rr9_all_df[rr9_all_df['Group'] != 'F'][found_genes+genes_predictive_of_phenotypes + ['Source Name', 'Group']]
+
+flight_tunel_data = rr9_all_df[rr9_all_df['Group'] == 'F'][tunel.columns.to_list() + ['Source Name', 'Group']]
+non_flight_tunel_data = rr9_all_df[rr9_all_df['Group'] != 'F'][tunel.columns.to_list() + ['Source Name', 'Group']]
+
+flight_data = rr9_all_df[rr9_all_df['Group'] == 'F'][tunel.columns.to_list()+ tonometry.columns.tolist()+ protein.columns.tolist()+zo1.columns.tolist()+ pecam.columns.tolist()+ microct.columns.tolist()+ pna.columns.tolist()+ hne.columns.tolist()+ ['Source Name', 'Group']]
+
+non_flight_data = rr9_all_df[rr9_all_df['Group'] != 'F'][tunel.columns.to_list()+ tonometry.columns.tolist()+ protein.columns.tolist()+zo1.columns.tolist()+ pecam.columns.tolist()+ microct.columns.tolist()+ pna.columns.tolist()+ hne.columns.tolist() + ['Source Name', 'Group']]
+
+merged_flight_data = pd.merge(
+    flight_relevant_genes,
+    flight_data, # use flight_tunel_data if imputing just from tunel data
+    on=['Source Name', 'Group'],
+    how='outer'
+)
+
+merged_non_flight_data = pd.merge(
+    non_flight_relevant_genes,
+    non_flight_data, # use non_flight_tunel_Data if imputing from only tunel data
+    on=['Source Name', 'Group'],
+    how='outer'
+)
+
+merged_non_flight_data = pd.merge(
+    non_flight_relevant_genes,
+    non_flight_data, # use non_flight_tunel_Data if imputing from only tunel data
+    on=['Source Name', 'Group'],
+    how='outer'
+)
+
+merged_flight_data.to_csv("merged_flight_data.csv", index=False)
+merged_non_flight_data.to_csv("merged_non_flight_data.csv", index=False)
+
+```
+

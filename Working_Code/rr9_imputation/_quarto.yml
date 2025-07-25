@@ -1,0 +1,23 @@
+project:
+  type: book
+
+book:
+  title: "rr9_imputation"
+  author: "Lauren Sanders, Jian Gong, Vaishnavi Nagesh"
+  date: "7/23/2025"
+  chapters:
+    - index.qmd
+    - rr9_retina_dataset.qmd
+    - impute.qmd
+    # - svm.qmd
+    - references.qmd
+
+bibliography: references.bib
+
+format:
+  html:
+    theme:
+      - cosmo
+      - brand
+  pdf:
+    documentclass: scrreprt

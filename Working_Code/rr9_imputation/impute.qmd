@@ -1,0 +1,182 @@
+---
+title: 'RR9 Dataset Imputation'
+author: 'Lauren Sanders, Jian Gong, Vaishnavi Nagesh'
+format:
+    html:
+        fig-width: 8
+        fig-height: 8
+        max-width: 1000px
+        toc: true
+        toc-depth: 5
+        code-fold: true
+        page-layout: full
+        code-overflow: wrap 
+        anchor-sections: true
+---
+
+```{python}
+#| label: Import libraries
+#| echo: False
+import pandas as pd
+from itables import show
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import KNNImputer, SimpleImputer
+from feature_engine.imputation import RandomSampleImputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
+from xgboost import XGBRegressor
+from sklearn.ensemble import BaggingRegressor
+from lightgbm import LGBMRegressor
+import requests
+import logging
+import os
+
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+```
+
+```{python}
+#| echo: false
+#| label: Read merged_flight_data and merged_non_flight_data
+merged_flight_data = pd.read_csv('merged_flight_data.csv', sep=",")
+merged_non_flight_data = pd.read_csv('merged_non_flight_data.csv', sep=",")
+
+# Instead of showing full correlation matrices, show only top N correlations
+N = 50  # adjust as needed
+
+def plot_correlation_matrix(df, title):
+    corr_matrix = df.corr(numeric_only=True).iloc[:N, :N]
+    fig = px.imshow(corr_matrix, text_auto=True, title=title)
+    return fig
+```
+
+## KNN Imputer
+### Flight Data
+```{python}
+#| echo: false
+#| label: KNN 2 neigbors imputer Flight Data
+#| cache: true
+imp_knn2 = KNNImputer(n_neighbors=2, weights='distance')
+imp_df_flight_knn2 = imp_knn2.fit_transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+imp_df_flight_knn2 = pd.DataFrame(imp_df_flight_knn2, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+imp_df_flight_knn2['Source Name'] = merged_flight_data['Source Name']
+imp_df_flight_knn2['Group'] = merged_flight_data['Group']
+
+
+fig = plot_correlation_matrix(imp_df_flight_knn2, "KNN-2 Correlation Matrix (Top 50x50)")
+fig.show()
+```
+
+### Non-Flight Data
+```{python}
+#| echo: false
+#| label: KNN 2 neigbors imputer Non Flight Data
+#| cache: true
+
+imp_knn2 = KNNImputer(n_neighbors=2, weights='distance')
+imp_df_non_flight_knn2 = imp_knn2.fit_transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+imp_df_non_flight_knn2 = pd.DataFrame(imp_df_non_flight_knn2, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+imp_df_non_flight_knn2['Source Name'] = merged_non_flight_data['Source Name']
+imp_df_non_flight_knn2['Group'] = merged_non_flight_data['Group']
+
+fig = plot_correlation_matrix(imp_df_non_flight_knn2, "KNN-2 Correlation Matrix (Top 50x50)")
+fig.show()
+```
+
+
+## Random Sample Imputer
+
+This is used in cases where there is more than 25-30% of data to be imputed and is also fast compared to others.
+
+### Flight Data
+```{python}
+#| echo: false
+#| label: Random Sample Imputer Flight Data
+#| cache: true
+rsi = RandomSampleImputer()
+rsi_df_flight = rsi.fit_transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+rsi_df_flight = pd.DataFrame(rsi_df_flight, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+rsi_df_flight['Source Name'] = merged_flight_data['Source Name']
+rsi_df_flight['Group'] = merged_flight_data['Group']
+
+fig = plot_correlation_matrix(rsi_df_flight, "RSI Correlation Matrix (Top 50x50)")
+fig.show()
+```
+
+
+### Non-Flight Data
+
+```{python}
+#| echo: false
+#| label: Random Sample Imputer Non Flight Data
+#| cache: true
+rsi = RandomSampleImputer()
+rsi_df_non_flight = rsi.fit_transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+rsi_df_non_flight = pd.DataFrame(rsi_df_non_flight, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+rsi_df_non_flight['Source Name'] = merged_non_flight_data['Source Name']
+rsi_df_non_flight['Group'] = merged_non_flight_data['Group']
+fig = plot_correlation_matrix(rsi_df_non_flight, "RSI Correlation Matrix (Top 50x50)")
+fig.show()
+```
+
+
+## Multiple Imputation by Chained Equation
+
+One can impute missing values by predicting them using other features from the dataset.
+
+The MICE or ‘Multiple Imputations by Chained Equations’, aka, ‘Fully Conditional Specification’ is a popular approach to do this.
+
+Here is a quick intuition (not the exact algorithm)
+![Image](mice.png)
+
+- You basically take the variable that contains missing values as a response ‘Y’ and other variables as predictors ‘X’.
+
+- Build a model with rows where Y is not missing.
+
+- Then predict the missing observations.
+
+Do this multiple times by doing random draws of the data and taking the mean of the predictions.
+
+
+## MICE with Bagging Regressor
+**Flight Data**
+```{python}
+#| label: MICE Bagging Regressor Flight Data
+#| echo: false
+#| cache: true
+bagger = BaggingRegressor(random_state=2, n_jobs=-1, warm_start=True, verbose=2)
+itera_bagger = IterativeImputer(random_state=2, initial_strategy='median', estimator=bagger, max_iter=10, verbose=2, tol=0.01)
+itera_bagger.fit(merged_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed_flight_br = itera_bagger.transform(merged_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed_flight_br = pd.DataFrame(df_bag_imputed_flight_br, columns=merged_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+df_bag_imputed_flight_br['Source Name'] = merged_flight_data['Source Name']
+df_bag_imputed_flight_br['Group'] = merged_flight_data['Group']
+
+
+fig = plot_correlation_matrix(df_bag_imputed_flight_br, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
+fig.show()
+``` 
+
+**Non-Flight Data**
+```{python}
+#| label: MICE Bagging Regressor Non Flight Data
+#| echo: false
+#| cache: true
+bagger = BaggingRegressor(random_state=2, n_jobs=-1, warm_start=True, verbose=2)
+itera_bagger = IterativeImputer(random_state=2, initial_strategy='median', estimator=bagger, max_iter=5, verbose=2, tol=0.01)
+itera_bagger.fit(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed_non_flight_br = itera_bagger.transform(merged_non_flight_data.drop(columns=['Source Name', 'Group']))
+df_bag_imputed_non_flight_br = pd.DataFrame(df_bag_imputed_non_flight_br, columns=merged_non_flight_data.drop(columns=['Source Name', 'Group']).columns.to_list())
+df_bag_imputed_non_flight_br['Source Name'] = merged_non_flight_data['Source Name']
+df_bag_imputed_non_flight_br['Group'] = merged_non_flight_data['Group']
+
+fig = plot_correlation_matrix(df_bag_imputed_non_flight_br, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
+fig.show()
+```

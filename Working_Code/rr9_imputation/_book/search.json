@@ -1,0 +1,132 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "rr9_imputation",
+    "section": "",
+    "text": "Preface\nThis is a Quarto book.\nTo learn more about Quarto books visit https://quarto.org/docs/books.",
+    "crumbs": [
+      "Preface"
+    ]
+  },
+  {
+    "objectID": "rr9_retina_dataset.html",
+    "href": "rr9_retina_dataset.html",
+    "title": "1  RR9 Retina Dataset Integration",
+    "section": "",
+    "text": "1.1 Digital Twin Project Description\nSpace biology confronts a critical obstacle: the challenge of incomplete data due to the logistical complexities and high costs of space missions. Addressing this issue, this research presents strategies that integrate AI and digital twin technology to overcome the limitations posed by sparse datasets in space biology research.\nBy presenting a cohesive strategy that combines synthetic data generation, automatic labeling, and advanced machine learning with digital twins, we showcase an application to the RR9 dataset at OSDR. This research aims to overcome the challenge of data scarcity in space biology, thereby forging a way to unlock insights into the potential of life beyond Earth.",
+    "crumbs": [
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>RR9 Retina Dataset Integration</span>"
+    ]
+  },
+  {
+    "objectID": "rr9_retina_dataset.html#rr9-background",
+    "href": "rr9_retina_dataset.html#rr9-background",
+    "title": "1  RR9 Retina Dataset Integration",
+    "section": "1.2 RR9 Background",
+    "text": "1.2 RR9 Background\nThe Rodent Research 9 payload consisted of three space biology experiments designed to examine impacts of long-duration spaceflight on visual impairment and joint tissue degradation that affect astronauts.\n\n\n\n\n\n\n\n\nInvestigation\nPurpose\nExperiments\n\n\n\n\nInvestigation 1\nEffects of microgravity on fluid shifts and increased fluid pressures that occur in the head.\n1. To determine whether spaceflight on the ISS alters rodent basilar artery spontaneous tone, myogenic and KCl (Potassium Chloride)-evoked vasoconstriction, mechanical stiffness and gross structure. 2. To estimate whether spaceflight on the ISS alters the blood-brain barrier in rodents, as indicated by ultrastructural examination of the junctional complex of the cerebral capillary endothelium. 3. To determine whether spaceflight on the ISS alters rodent basal vein (inside cranium) and jugular vein (outside cranium) spontaneous tone, myogenic and KCl-evoked constriction, distension, and gross structure. 4. To determine whether spaceflight on the ISS alters the ability of the cervical lymphatics to modulate lymph flow, and thus, regulate cerebral fluid homeostasis.\n\n\nInvestigation 2\nImpact of spaceflight on the vessels that supply blood to the eyes.\n1. Define the relationships between spaceflight condition-induced oxidative stress in reactive oxygen species (ROS) expression and retinal vascular remodeling and BRB function in mice return to Earth alive. 2. Determine whether spaceflight condition-induced oxidative damage in retina is mediated through photoreceptor mitochondrial ROS production.\n\n\nInvestigation 3\nExtent of knee and hip joint degradation caused by prolonged exposure to weightlessness.\n1. Determine the extent of knee and hip joint degradation in mice after 30 days of spaceflight on the ISS. 2. Use the DigiGait System to assess gait patterns before and after returning from the ISS.\n\n\n\nWe are interested in the Retinal data and all things related to Eye. So, all the experiments related to Investigation 1 and 2 will be studied here. Below is the table of all OSD identifiers related to above investigations obtained from https://osdr.nasa.gov/bio/repo/data/payloads/RR-9\n\n\n\nIdentifier\nTitle\nFactors\nAssay Types\n\n\n\n\nOSD-557\nSpaceflight influences gene expression, photoreceptor integrity, and oxidative stress related damage in the murine retina (RR-9)\nSpaceflight\nBone MicrostructureMolecular Cellular Imaginghistology\n\n\nOSD-568\nCharacterization of mouse ocular responses (Microscopy) to a 35-day (RR-9) spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations\nSpaceflight\nMolecular Cellular Imaging\n\n\nOSD-715\nCharacterization of mouse ocular response to a 35-day spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations - Proteomics data\nSpaceflight\nprotein expression profiling\n\n\nOSD-255\nSpaceflight influences gene expression, photoreceptor integrity, and oxidative stress-related damage in the murine retina\nSpaceflight\ntranscription profiling\n\n\nOS-140\nSpace Flight Environment Induces Remodeling of Vascular Network and Glia-Vascular Communication in Mouse Retina\nSpaceflight\n\n\n\nOSD-583\nCharacterization of mouse ocular responses (intraocular pressure) to a 35-day (RR-9) spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations\nSpaceflight\nTonometry\n\n\n\nThe purpose of this notebook is to combine all retina data from the Rodent Research 9 (RR9) mission from the NASA Open Science Data Repository, perform exploratory data analysis, impute missing data and train a digital twin.\nOriginal Author: Lauren Sanders\nAdditional Author(s): Jian Gong, Vaishnavi Nagesh",
+    "crumbs": [
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>RR9 Retina Dataset Integration</span>"
+    ]
+  },
+  {
+    "objectID": "rr9_retina_dataset.html#load-data",
+    "href": "rr9_retina_dataset.html#load-data",
+    "title": "1  RR9 Retina Dataset Integration",
+    "section": "1.3 Load Data",
+    "text": "1.3 Load Data\nWe are downloading all the relevant data as shown in the the table below.\n::: {#cell-Load data Cell .cell execution_count=4}\n\n\n\n    \n    \n    \n        \n        \n        \n        \n        \n        \n        \n        \n    \n    \n   \n    \n      \n  \n        \n    \n    \n  \n        \n    \n    \n  \n        \n    \n      \n  \n        \n            \n                \n                \n            \n\n            \n                \n                \n            \n\n            \n                \n                \n            \n\n            \n                \n                \n            \n\n            \n                \n                \n            \n        \n    \n\n\n    Loading ITables v2.4.4 from the internet...\n    (need help?)\n    \n\n\n\n:::",
+    "crumbs": [
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>RR9 Retina Dataset Integration</span>"
+    ]
+  },
+  {
+    "objectID": "rr9_retina_dataset.html#data-exploration-and-validation",
+    "href": "rr9_retina_dataset.html#data-exploration-and-validation",
+    "title": "1  RR9 Retina Dataset Integration",
+    "section": "1.4 Data Exploration and Validation",
+    "text": "1.4 Data Exploration and Validation\nThe below table shows number of features in each dataset that constitute the RR9 multi-modal data. This is useful in identifying the maximum number of PCA components required to explain the cumulative variance in the dataset.\n::: {#cell-Summarize Data .cell execution_count=6}\n\n\n\n    \n    \n    \n        \n        \n        \n        \n        \n        \n        \n        \n    \n    \n   \n    \n      \n  \n        \n    \n    \n  \n        \n    \n    \n  \n        \n    \n      \n  \n        \n            \n                \n                \n            \n\n            \n                \n                \n            \n\n            \n                \n                \n            \n\n            \n                \n                \n            \n\n            \n                \n                \n            \n        \n    \n\n\n    Loading ITables v2.4.4 from the internet...\n    (need help?)\n    \n\n\n\n:::",
+    "crumbs": [
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>RR9 Retina Dataset Integration</span>"
+    ]
+  },
+  {
+    "objectID": "rr9_retina_dataset.html#summary-of-the-merged-data-frame",
+    "href": "rr9_retina_dataset.html#summary-of-the-merged-data-frame",
+    "title": "1  RR9 Retina Dataset Integration",
+    "section": "1.5 Summary of the Merged Data frame",
+    "text": "1.5 Summary of the Merged Data frame\n::: {#cell-Summarize Data Merged Data Frame .cell execution_count=7}\n\n\n\n\n\n\n\n:::",
+    "crumbs": [
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>RR9 Retina Dataset Integration</span>"
+    ]
+  },
+  {
+    "objectID": "rr9_retina_dataset.html#pca-on-different-categories-of-datasets",
+    "href": "rr9_retina_dataset.html#pca-on-different-categories-of-datasets",
+    "title": "1  RR9 Retina Dataset Integration",
+    "section": "1.6 PCA on Different Categories of Datasets",
+    "text": "1.6 PCA on Different Categories of Datasets\n\n1.6.0.1 PCA on RNASeq\n\n\n                                                \n\n\n\n\n\n\n\n\n\n\n\n1.6.0.2 PCA on RNASeq for Only Predictive Genes for Phenotype\n\n\n                                                \n\n\n\n\n\n\n\n\n\n\n\n1.6.0.3 PCA on Phenotype Related RNASeq Genes\n\n\n51 genes found in the RNASeq dataset.\n\n\n                                                \n\n\n\n\n\n\n\n\n\n\n\n1.6.0.4 PCA on Proteomics\n\n\n                                                \n\n\n\n\n\n\n\n\n\n\n\n1.6.0.5 PCA on TUNEL Assay\n\n\n                                                \n\n\n\n\n\n\n\n\n\n\n\n1.6.0.6 PCA on HNE Immunostaining Micoscopy\n\n\n                                                \n\n\n\n\n\n\n\n\n\n\n\n1.6.0.7 PCA on Micro CT\n\n\n                                                \n\n\n\n\n\n\n\n\n\n\n\n1.6.0.8 PCA on Combined Immunostaining Micoscopy data from Zo-1, PECAM, PNA and HNE\nZo-1, PECAM, PNA and HNE are all immunostaining microscopy. It would be useful to see if combining them all helps in better separation between the groups.\n\n\n                                                \n\n\n\n\n\n\n\n\n\nFrom the PCA analysis of different datasets, it seems like there is fair separation betwee flight and other groups. However, there isn’t sufficient data to show separation between GC, Viv and CC groups.",
+    "crumbs": [
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>RR9 Retina Dataset Integration</span>"
+    ]
+  },
+  {
+    "objectID": "rr9_retina_dataset.html#data-analysis-correlation-between-hne-and-rnaseq",
+    "href": "rr9_retina_dataset.html#data-analysis-correlation-between-hne-and-rnaseq",
+    "title": "1  RR9 Retina Dataset Integration",
+    "section": "1.7 Data Analysis Correlation Between HNE and RNASeq",
+    "text": "1.7 Data Analysis Correlation Between HNE and RNASeq\nHNE Immunostaining microscopy has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both HNE and RNASeq.\nTo be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and HNE needs to be determined.",
+    "crumbs": [
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>RR9 Retina Dataset Integration</span>"
+    ]
+  },
+  {
+    "objectID": "rr9_retina_dataset.html#data-analysis-correlation-between-tunel-assay-and-rnaseq",
+    "href": "rr9_retina_dataset.html#data-analysis-correlation-between-tunel-assay-and-rnaseq",
+    "title": "1  RR9 Retina Dataset Integration",
+    "section": "1.8 Data Analysis Correlation Between TUNEL Assay and RNASeq",
+    "text": "1.8 Data Analysis Correlation Between TUNEL Assay and RNASeq\nThe reason to select TUNEL for correlation analysis is that TUNEL assay points seem to separate out cleaner on the PCA plots than HNE data points between different groups. TUNEL Assay has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both TUNEL and RNASeq.\nTo be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and TUNEL needs to be determined.",
+    "crumbs": [
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>RR9 Retina Dataset Integration</span>"
+    ]
+  },
+  {
+    "objectID": "impute.html",
+    "href": "impute.html",
+    "title": "2  RR9 Dataset Imputation",
+    "section": "",
+    "text": "2.1 KNN Imputer",
+    "crumbs": [
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>RR9 Dataset Imputation</span>"
+    ]
+  },
+  {
+    "objectID": "impute.html#knn-imputer",
+    "href": "impute.html#knn-imputer",
+    "title": "2  RR9 Dataset Imputation",
+    "section": "",
+    "text": "2.1.1 Flight Data\n\n\n                                                \n\n\n                                                \n\n\n\n\n2.1.2 Non-Flight Data\n::: {#cell-KNN 2 neigbors imputer Non Flight Data .cell cache=‘true’ execution_count=4}\n\n                                                \n\n:::",
+    "crumbs": [
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>RR9 Dataset Imputation</span>"
+    ]
+  },
+  {
+    "objectID": "impute.html#random-sample-imputer",
+    "href": "impute.html#random-sample-imputer",
+    "title": "2  RR9 Dataset Imputation",
+    "section": "2.2 Random Sample Imputer",
+    "text": "2.2 Random Sample Imputer\nThis is used in cases where there is more than 25-30% of data to be imputed and is also fast compared to others.\n\n2.2.1 Flight Data\n::: {#cell-Random Sample Imputer Flight Data .cell cache=‘true’ execution_count=5}\n\n                                                \n\n:::\n\n\n2.2.2 Non-Flight Data\n::: {#cell-Random Sample Imputer Non Flight Data .cell cache=‘true’ execution_count=6}\n\n                                                \n\n:::",
+    "crumbs": [
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>RR9 Dataset Imputation</span>"
+    ]
+  },
+  {
+    "objectID": "impute.html#multiple-imputation-by-chained-equation",
+    "href": "impute.html#multiple-imputation-by-chained-equation",
+    "title": "2  RR9 Dataset Imputation",
+    "section": "2.3 Multiple Imputation by Chained Equation",
+    "text": "2.3 Multiple Imputation by Chained Equation\nOne can impute missing values by predicting them using other features from the dataset.\nThe MICE or ‘Multiple Imputations by Chained Equations’, aka, ‘Fully Conditional Specification’ is a popular approach to do this.\nHere is a quick intuition (not the exact algorithm) \n\nYou basically take the variable that contains missing values as a response ‘Y’ and other variables as predictors ‘X’.\nBuild a model with rows where Y is not missing.\nThen predict the missing observations.\n\nDo this multiple times by doing random draws of the data and taking the mean of the predictions.\n\n2.3.1 Flight Data\n\n\n2.3.2 Non-Flight Data",
+    "crumbs": [
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>RR9 Dataset Imputation</span>"
+    ]
+  }
+]
