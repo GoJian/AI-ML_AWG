@@ -1,0 +1,261 @@
+---
+title: 'RR9 Dataset Imputation Validation'
+author: 'Lauren Sanders, Jian Gong, Vaishnavi Nagesh'
+format:
+    html:
+        toc: true
+        toc-depth: 5
+        code-fold: true
+        page-layout: full
+        code-overflow: wrap 
+        anchor-sections: true
+        fig-width: 15
+        fig-height: 15
+        max-width: 1000px
+---
+
+**Establishing a Classifier to Validate Imputation for TUNEL and RNASeq Datasets**
+To validate the effectiveness of imputation, we propose building a binary classifier to distinguish between flight and non-flight samples using the complete RNASeq and TUNEL datasets. After imputing missing values in the TUNEL and RNASeq datasets, we will train the same classifier on the imputed data and compare its performance metrics (e.g., accuracy, precision, recall, F1-score) with those obtained from the complete datasets. This comparison will help assess whether the imputation process preserves the integrity and predictive power of the data.
+
+```{python}
+#| label: Import libraries
+#| echo: false
+import pandas as pd
+from itables import show
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import KNNImputer, SimpleImputer
+from feature_engine.imputation import RandomSampleImputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.ensemble import BaggingRegressor
+import requests
+import logging
+import os
+
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+```
+
+## Checking The Correlations
+
+```{python}
+#| echo: false
+#| label: Function to Extract and obtain correlation dataframes
+
+def corr_df_gen(df_path, corr_coln_name):
+    df = pd.read_csv(df_path, sep=',')
+    corr_mat = df.corr(numeric_only=True)
+    corr_df = corr_mat.unstack().reset_index()
+    corr_df.rename(columns={'level_0': 'para_1', 'level_1':'para_2', 
+    0:f'{corr_coln_name}'}, inplace=True)
+    return df, corr_df
+
+rr9_all_df = pd.read_csv('rr9_all_data.csv')
+rnaseq_columns = pd.read_csv('rnaseq_columns.csv', header=None)[0].tolist()
+tunel_columns = pd.read_csv('tunel_columns.csv', header=None)[0].tolist()
+microct_columns = pd.read_csv('microct_columns.csv', header=None)[0].tolist()
+tonometry_columns = pd.read_csv('tonometry_columns.csv', header=None)[0].tolist()
+protein_columns = pd.read_csv('protein_columns.csv', header=None)[0].tolist()
+hne_columns = pd.read_csv('hne_columns.csv', header=None)[0].tolist()
+```
+
+### Flight Data
+```{python}
+#| echo: false
+#| label: Check Correlations between Flight Data Before and After Imputation
+merged_flight_df, corr_orig_flight_df = corr_df_gen('merged_flight_data.csv', 'corr_orig_flight')
+imp_flight_knn2_df, corr_knn_flight_df = corr_df_gen('flight_imputed_knn2.csv', 'corr_knn2_flight')
+imp_flight_rsi_df, corr_rsi_flight_df = corr_df_gen('flight_imputed_rsi.csv', 'corr_rsi_flight')
+imp_flight_mice_df, corr_mice_flight_df = corr_df_gen('flight_imputed_mice_bagger.csv', 'corr_mice_bagger_flight')
+
+# Merge all DataFrames on 'para_1' and 'para_2'
+merged_corr_df = pd.merge(corr_knn_flight_df, corr_rsi_flight_df, on=['para_1', 'para_2'], how='inner')
+merged_corr_df = pd.merge(merged_corr_df, corr_mice_flight_df, on=['para_1', 'para_2'], how='inner')
+merged_corr_df = pd.merge(merged_corr_df, corr_orig_flight_df, on=['para_1', 'para_2'], how='inner')
+
+#Todo: Need to figure out a better Correlation Test
+import scipy.stats as stats
+print(stats.spearmanr(merged_corr_df['corr_knn2_flight'], merged_corr_df['corr_orig_flight']))
+
+print(stats.spearmanr(merged_corr_df['corr_rsi_flight'], merged_corr_df['corr_orig_flight']))
+
+print(stats.spearmanr(merged_corr_df['corr_mice_bagger_flight'], merged_corr_df['corr_orig_flight']))
+```
+
+
+```{python}
+#| echo: false
+#| label: Check Correlations between Flight Data Before and After Imputation - Plots
+fig,ax = plt.subplots(1,3, figsize=(50, 10.5))
+sns.scatterplot(x = merged_corr_df['corr_orig_flight'], y = merged_corr_df['corr_knn2_flight'],
+                data=merged_corr_df, ax=ax[0])
+sns.scatterplot(x = merged_corr_df['corr_orig_flight'], y = merged_corr_df['corr_rsi_flight'],
+                data=merged_corr_df, ax=ax[1])             
+
+sns.scatterplot(x = merged_corr_df['corr_orig_flight'], y = merged_corr_df['corr_mice_bagger_flight'],
+                data=merged_corr_df, ax=ax[2])
+```
+
+### Non Flight Data
+
+```{python}
+#| echo: false
+#| label: Check Correlations between Non Flight Data Before and After Imputation
+merged_non_flight_df, corr_orig_non_flight_df = corr_df_gen('merged_non_flight_data.csv', 'corr_orig_non_flight')
+imp_non_flight_knn2_df, corr_knn_non_flight_df = corr_df_gen('non_flight_imputed_knn2.csv', 'corr_knn2_non_flight')
+imp_non_flight_rsi_df, corr_rsi_non_flight_df = corr_df_gen('non_flight_imputed_rsi.csv', 'corr_rsi_non_flight')
+imp_non_flight_mice_df,corr_mice_non_flight_df = corr_df_gen('non_flight_imputed_mice_bagger.csv', 'corr_mice_bagger_non_flight')
+
+# Merge all DataFrames on 'para_1' and 'para_2'
+merged_corr_non_flight_df = pd.merge(corr_knn_non_flight_df, corr_rsi_non_flight_df, on=['para_1', 'para_2'], how='inner')
+merged_corr_non_flight_df = pd.merge(merged_corr_non_flight_df, corr_mice_non_flight_df, on=['para_1', 'para_2'], how='inner')
+merged_corr_non_flight_df = pd.merge(merged_corr_non_flight_df, corr_orig_non_flight_df, on=['para_1', 'para_2'], how='inner')
+
+#Todo: Need to figure out a better Correlation Test
+import scipy.stats as stats
+print(stats.spearmanr(merged_corr_non_flight_df['corr_knn2_non_flight'], merged_corr_non_flight_df['corr_orig_non_flight']))
+
+print(stats.spearmanr(merged_corr_non_flight_df['corr_rsi_non_flight'], merged_corr_non_flight_df['corr_orig_non_flight']))
+
+print(stats.spearmanr(merged_corr_non_flight_df['corr_mice_bagger_non_flight'], merged_corr_non_flight_df['corr_orig_non_flight']))
+```
+
+```{python}
+#| echo: false
+#| label: Check Correlations between Non Flight Data Before and After Imputation - Plots
+fig,ax = plt.subplots(1,3, figsize=(50, 10.5))
+sns.scatterplot(x = merged_corr_non_flight_df['corr_orig_non_flight'], y = merged_corr_non_flight_df['corr_knn2_non_flight'],
+                data=merged_corr_non_flight_df, ax=ax[0])
+sns.scatterplot(x = merged_corr_non_flight_df['corr_orig_non_flight'], y = merged_corr_non_flight_df['corr_rsi_non_flight'],
+                data=merged_corr_non_flight_df, ax=ax[1])             
+
+sns.scatterplot(x = merged_corr_non_flight_df['corr_orig_non_flight'], y = merged_corr_non_flight_df['corr_mice_bagger_non_flight'],
+                data=merged_corr_non_flight_df, ax=ax[2])
+```
+
+## SVM for Validating Imputations
+```{python}
+ #| echo: false
+ #| label: SVM Classifier Validation Based on Imputed Data
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import classification_report, accuracy_score
+
+def train_svm_classifier(data, label_col='Group'):
+    """
+    Train an SVM classifier to distinguish between flight and non-flight samples.
+    """
+    # Prepare features and labels
+    X = data.drop(columns=['Source Name', label_col])
+    y = data[label_col].apply(lambda x: 1 if x == 'F' else 0)  # Binary classification: Flight (1) vs Non-Flight (0)
+
+    # Split into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+
+    # Train the SVM classifier
+    svm = SGDClassifier(loss='hinge', random_state=42, n_jobs=-1, max_iter=1000, tol=1e-3)
+    svm.fit(X_train, y_train)
+
+    # Evaluate the classifier
+    y_pred = svm.predict(X_test)
+    print("Classification Report:")
+    print(classification_report(y_test, y_pred))
+    print("Accuracy:", accuracy_score(y_test, y_pred))
+
+    return svm
+```
+
+```{python}
+#| label: Train and evaluate SVM on RNASeq staining data
+#| echo: false
+print("SVM on RNA Seq Data:")
+
+rnaseq_data = rr9_all_df[['Source Name', 'Group'] + rnaseq_columns]
+
+# Drop rows with NaN values
+rnaseq_data_cleaned = rnaseq_data.dropna()
+
+train_svm_classifier(rnaseq_data_cleaned)
+```
+
+```{python}
+#| label: Train and evaluate SVM on HNE staining data
+#| echo: false
+print("SVM on HNE Staining Data:")
+hne_data = rr9_all_df[['Source Name', 'Group'] + hne_columns]
+
+# Drop rows with NaN values
+hne_data_cleaned = hne_data.dropna()
+
+train_svm_classifier(hne_data_cleaned)
+```
+
+```{python}
+#| label: Train and evaluate SVM on TUNEL data
+#| echo: false
+print("SVM on TUNEL Data:")
+tunel_data = rr9_all_df[['Source Name', 'Group'] + tunel_columns]
+
+# Drop rows with NaN values
+tunel_data_cleaned = tunel_data.dropna()
+
+train_svm_classifier(tunel_data_cleaned)
+```
+
+```{python}
+#| label: Train and evaluate SVM on Proteomics data
+#| echo: false
+print("SVM on Protein Data:")
+protein_data = rr9_all_df[['Source Name', 'Group'] + protein_columns]
+
+# Drop rows with NaN values
+protein_data_cleaned = protein_data.dropna()
+
+train_svm_classifier(protein_data_cleaned)
+```
+
+```{python}
+#| label: Train and evaluate SVM on Tonometry data
+#| echo: false
+print("SVM on Tonometry Data:")
+tonometry_data = rr9_all_df[['Source Name', 'Group'] + tonometry_columns]
+
+# Drop rows with NaN values
+tonometry_data_cleaned = tonometry_data.dropna()
+
+train_svm_classifier(tonometry_data_cleaned)
+```
+
+```{python}
+#| label: Train and evaluate SVM on KNN-imputed data
+#| echo: false
+print("SVM on KNN-Imputed Data:")
+knn_imputed_data = pd.concat([imp_flight_knn2_df, imp_non_flight_knn2_df], axis=0)
+train_svm_classifier(knn_imputed_data)
+
+# Train and evaluate SVM on Random Sample Imputed data
+print("SVM on Random Sample Imputed Data:")
+rsi_imputed_data = pd.concat([imp_flight_rsi_df, imp_non_flight_rsi_df], axis=0)
+train_svm_classifier(rsi_imputed_data)
+
+```
+
+```{python}
+#| label: Train and evaluate SVM on MICE with Bagging Regressor-imputed data
+#| echo: false
+print("SVM on MICE with Bagging Regressor-Imputed Data:")
+mice_bag_imputed_data = pd.concat([imp_flight_mice_df, imp_non_flight_mice_df], axis=0)
+
+# Drop rows with NaN values in the 'Group' column
+mice_bag_imputed_data = mice_bag_imputed_data.dropna(subset=['Group'])
+
+train_svm_classifier(mice_bag_imputed_data)
+```
+

@@ -1,0 +1,84 @@
+---
+title: 'Generation of Image Embeddings and Imputing Embedding using Neural Nets'
+subtitle: 'Imputing missing image embedding derived from correlation of Final Assay Values'
+author: 'Lauren Sanders, Jian Gong, Vaishnavi Nagesh'
+format:
+    html:
+        toc: true
+        toc-depth: 5
+        code-fold: true
+        page-layout: full
+        code-overflow: wrap 
+        anchor-sections: true
+---
+## Background
+The imputation to generate a complete dataset is anchored on the physiological assay valus such TUNEL, PECAM, HNE, Tonometry, etc. These values are calculated by imageJ analysis and have sparse feature set which is not ideal for imputing large datasets.
+The idea of generating image embeddings is to get dense data and use it for imputation purposes.
+
+
+## Method
+MicroCT, PECAM, Zo-1, TUNEL, Histology, HNE and PNA images are downloaded. The image embeddings for single images where available or overlay images of all channels where available is used to generate embeddings using dense neural networks. The training provided will be for two classes - Flight and Non-Flight.
+
+These embeddings are then imposed with exploratory data analysis, such as PCA, correlation to final assay values, etc.
+
+If the final values are p embeddings are not due to lack of images, then appropriate regression will be applied to calculate the image embeddings, there by completing the dataset for the physiological assay.
+
+``` {python}
+#| label: Import libraries
+#| echo: false
+ 
+import pandas as pd
+import natsort
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+```
+
+## Data
+### Images List to be Downloaded for Different Samples and Assays
+
+| Sample Name | OSD Study ID | Assay Name | Raw Data File                                |
+| ----------- | ------------ | ---------- | -------------------------------------------- |
+| Viv20       | OSD-557      | histology  | LSDS-1_Histology_V20_RR9_Ret_2X_HE_29.zip    |
+| Viv19       | OSD-557      | histology  | LSDS-1_Histology_V19_RR9_Ret_2X_HE_28.zip    |
+| Viv18       | OSD-557      | histology  | LSDS-1_Histology_V18_RR9_Ret_2X_HE_27.zip    |
+| Viv17       | OSD-557      | histology  | LSDS-1_Histology_V17_RR9_Ret_2X_HE_26.zip    |
+| Viv16       | OSD-557      | histology  | LSDS-1_Histology_V16_RR9_Ret_2X_HE_25.zip    |
+| Viv15       | OSD-557      | histology  | LSDS-1_Histology_V15_RR9_Ret_2X_HE_24.zip    |
+| GC20        | OSD-557      | histology  | LSDS-1_Histology_GC20_RR9_Ret_2X_10X_HE.zip  |
+| GC19        | OSD-557      | histology  | LSDS-1_Histology_GC19_RR9_Ret_2X_10X_HE.zip  |
+| GC18        | OSD-557      | histology  | LSDS-1_Histology_GC18_RR9_Ret_2X_10X_HE.zip  |
+| GC17        | OSD-557      | histology  | LSDS-1_Histology_GC17_RR9_Ret_2X_10X_HE.zip  |
+| GC16        | OSD-557      | histology  | LSDS-1_Histology_GC16_RR9_Ret_2X_10X_HE.zip  |
+| GC15        | OSD-557      | histology  | LSDS-1_Histology_GC15_RR9_Ret_2X_10X_HE.zip  |
+| F20         | OSD-557      | histology  | LSDS-1_Histology_F20_RR9_Ret_2X_10X_HE.zip   |
+| F19         | OSD-557      | histology  | LSDS-1_Histology_F19_RR9_Ret_2X_10X_HE.zip   |
+| F18         | OSD-557      | histology  | LSDS-1_Histology_F18_RR9_Ret_2X__10X_HE.zip  |
+| F17         | OSD-557      | histology  | LSDS-1_Histology_F17_RR9_Ret_2X__10X_HE.zip  |
+| F16         | OSD-557      | histology  | LSDS-1_Histology_F16_RR9_Ret_2X__10X_HE.zip  |
+| F15         | OSD-557      | histology  | LSDS-1_Histology_F15_RR9_Ret_2X__10X_HE.zip  |
+| CC2_20      | OSD-557      | histology  | LSDS-1_Histology_CC2_20_RR9_Ret_2X_HE_34.zip |
+| CC2_18      | OSD-557      | histology  | LSDS-1_Histology_CC2_18_RR9_Ret_2X_HE_33.zip |
+| CC2_17      | OSD-557      | histology  | LSDS-1_Histology_CC2_17_RR9_Ret_2X_HE_32.zip |
+| CC2_16      | OSD-557      | histology  | LSDS-1_Histology_CC2_16_RR9_Ret_2X_HE_31.zip |
+| CC2_15      | OSD-557      | histology  | LSDS-1_Histology_CC2_15_RR9_Ret_2X_HE_30.zip |
+
+### Imges vs Assay Values for the Samples
+```{python}
+#| echo: false
+
+df = pd.read_csv('data_presence_for_embeddings.txt', delim_whitespace=True)
+df = df.set_index('Source_Name')
+df = df.reindex(natsort.natsorted(df.index))
+plt.figure(figsize=(35,12))
+ax = sns.heatmap(df.T.astype(int), cmap='Blues', cbar=True, linewidths=1, linecolor="black")
+ax.set_xticks(range(len(df.index)))
+ax.set_xticklabels(df.index, rotation=90, fontsize=16, fontweight ="bold")
+ax.set_yticklabels(ax.get_yticklabels(), fontsize=16, fontweight='bold')
+ax.set_xlabel("Sample Names")
+ax.set_ylabel("Categories")
+# plt.title("Heatmap of Data Availability per Category")
+ax.set_title('Heatmap of Data Availability per Category', fontsize=20, fontweight="bold")
+plt.show()
+
+```
