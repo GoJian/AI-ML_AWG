@@ -1,0 +1,103 @@
+Sample Name,OSD Study ID,Assay Name,Directory,Raw Data File
+CC2_15,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_CC2_15_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_CC2_15_ Mouse_Eye_TUNEL.zip
+CC2_15,OSD-557,histology,LSDS-1_Histology_CC2_15_RR9_Ret_2X_HE_30,LSDS-1_Histology_CC2_15_RR9_Ret_2X_HE_30.zip
+CC2_15,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_CC2_15_Mouse_Eye,LSDS-1_immunostaining_CC2_15_Mouse_Eye.zip
+CC2_16,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_CC2_16_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_CC2_16_ Mouse_Eye_TUNEL.zip
+CC2_16,OSD-557,histology,LSDS-1_Histology_CC2_16_RR9_Ret_2X_HE_31,LSDS-1_Histology_CC2_16_RR9_Ret_2X_HE_31.zip
+CC2_16,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_CC2_16_Mouse_Eye,LSDS-1_immunostaining_CC2_16_Mouse_Eye.zip
+CC2_17,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_CC2_17_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_CC2_17_ Mouse_Eye_TUNEL.zip
+CC2_17,OSD-557,histology,LSDS-1_Histology_CC2_17_RR9_Ret_2X_HE_32,LSDS-1_Histology_CC2_17_RR9_Ret_2X_HE_32.zip
+CC2_17,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_CC2_17_Mouse_Eye,LSDS-1_immunostaining_CC2_17_Mouse_Eye.zip
+CC2_18,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_CC2_18_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_CC2_18_ Mouse_Eye_TUNEL.zip
+CC2_18,OSD-557,histology,LSDS-1_Histology_CC2_18_RR9_Ret_2X_HE_33,LSDS-1_Histology_CC2_18_RR9_Ret_2X_HE_33.zip
+CC2_18,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_CC2_18_Mouse_Eye,LSDS-1_immunostaining_CC2_18_Mouse_Eye.zip
+CC2_20,OSD-557,histology,LSDS-1_Histology_CC2_20_RR9_Ret_2X_HE_34,LSDS-1_Histology_CC2_20_RR9_Ret_2X_HE_34.zip
+CC2_20,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_CC2_20_Mouse_Eye,LSDS-1_immunostaining_CC2_20_Mouse_Eye.zip
+CC2_20,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_CC2_20_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_CC2_20_ Mouse_Eye_TUNEL.zip
+F15,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_F15_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_F15_ Mouse_Eye_PECAM.zip
+F15,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_F15_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_F15_ Mouse_Eye_ZO.zip
+F15,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_F15_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_F15_ Mouse_Eye_TUNEL.zip
+F15,OSD-557,histology,LSDS-1_Histology_F15_RR9_Ret_2X__10X_HE,LSDS-1_Histology_F15_RR9_Ret_2X__10X_HE.zip
+F15,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_F15_Mouse_Eye,LSDS-1_immunostaining_F15_Mouse_Eye.zip
+F15,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_F15_Mouse_Eye,LSDS-1_immunostaining_F15_Mouse_Eye.zip
+F16,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_F16_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_F16_ Mouse_Eye_PECAM.zip
+F16,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_F16_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_F16_ Mouse_Eye_ZO.zip
+F16,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_F16_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_F16_ Mouse_Eye_TUNEL.zip
+F16,OSD-557,histology,LSDS-1_Histology_F16_RR9_Ret_2X__10X_HE,LSDS-1_Histology_F16_RR9_Ret_2X__10X_HE.zip
+F16,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_F16_Mouse_Eye,LSDS-1_immunostaining_F16_Mouse_Eye.zip
+F17,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_F17_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_F17_ Mouse_Eye_PECAM.zip
+F17,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_F17_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_F17_ Mouse_Eye_ZO.zip
+F17,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_F17_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_F17_ Mouse_Eye_TUNEL.zip
+F17,OSD-557,histology,LSDS-1_Histology_F17_RR9_Ret_2X__10X_HE,LSDS-1_Histology_F17_RR9_Ret_2X__10X_HE.zip
+F17,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_F17_Mouse_Eye,LSDS-1_immunostaining_F17_Mouse_Eye.zip
+F17,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_F17_Mouse_Eye,LSDS-1_immunostaining_F17_Mouse_Eye.zip
+F18,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_F18_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_F18_ Mouse_Eye_PECAM.zip
+F18,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_F18_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_F18_ Mouse_Eye_ZO.zip
+F18,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_F18_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_F18_ Mouse_Eye_TUNEL.zip
+F18,OSD-557,histology,LSDS-1_Histology_F18_RR9_Ret_2X__10X_HE,LSDS-1_Histology_F18_RR9_Ret_2X__10X_HE.zip
+F18,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_F18_Mouse_Eye,LSDS-1_immunostaining_F18_Mouse_Eye.zip
+F18,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_F18_Mouse_Eye,LSDS-1_immunostaining_F18_Mouse_Eye.zip
+F19,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_F19_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_F19_ Mouse_Eye_PECAM.zip
+F19,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_F19_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_F19_ Mouse_Eye_ZO.zip
+F19,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_F19_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_F19_ Mouse_Eye_TUNEL.zip
+F19,OSD-557,histology,LSDS-1_Histology_F19_RR9_Ret_2X_10X_HE,LSDS-1_Histology_F19_RR9_Ret_2X_10X_HE.zip
+F19,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_F19_Mouse_Eye,LSDS-1_immunostaining_F19_Mouse_Eye.zip
+F19,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_F19_Mouse_Eye,LSDS-1_immunostaining_F19_Mouse_Eye.zip
+F20,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_F20_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_F20_ Mouse_Eye_PECAM.zip
+F20,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_F20_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_F20_ Mouse_Eye_ZO.zip
+F20,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_F20_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_F20_ Mouse_Eye_TUNEL.zip
+F20,OSD-557,histology,LSDS-1_Histology_F20_RR9_Ret_2X_10X_HE,LSDS-1_Histology_F20_RR9_Ret_2X_10X_HE.zip
+F20,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_F20_Mouse_Eye,LSDS-1_immunostaining_F20_Mouse_Eye.zip
+F20,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_F20_Mouse_Eye,LSDS-1_immunostaining_F20_Mouse_Eye.zip
+GC15,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC15_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_GC15_ Mouse_Eye_PECAM.zip
+GC15,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC15_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_GC15_ Mouse_Eye_ZO.zip
+GC15,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_GC15_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_GC15_ Mouse_Eye_TUNEL.zip
+GC15,OSD-557,histology,LSDS-1_Histology_GC15_RR9_Ret_2X_10X_HE,LSDS-1_Histology_GC15_RR9_Ret_2X_10X_HE.zip
+GC15,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_GC15_Mouse_Eye,LSDS-1_immunostaining_GC15_Mouse_Eye.zip
+GC15,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_GC15_Mouse_Eye,LSDS-1_immunostaining_GC15_Mouse_Eye.zip
+GC16,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC16_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_GC16_ Mouse_Eye_PECAM.zip
+GC16,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC16_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_GC16_ Mouse_Eye_ZO.zip
+GC16,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_GC16_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_GC16_ Mouse_Eye_TUNEL.zip
+GC16,OSD-557,histology,LSDS-1_Histology_GC16_RR9_Ret_2X_10X_HE,LSDS-1_Histology_GC16_RR9_Ret_2X_10X_HE.zip
+GC16,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_GC16_Mouse_Eye,LSDS-1_immunostaining_GC16_Mouse_Eye.zip
+GC16,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_GC16_Mouse_Eye,LSDS-1_immunostaining_GC16_Mouse_Eye.zip
+GC17,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC17_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_GC17_ Mouse_Eye_PECAM.zip
+GC17,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC17_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_GC17_ Mouse_Eye_ZO.zip
+GC17,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_GC17_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_GC17_ Mouse_Eye_TUNEL.zip
+GC17,OSD-557,histology,LSDS-1_Histology_GC17_RR9_Ret_2X_10X_HE,LSDS-1_Histology_GC17_RR9_Ret_2X_10X_HE.zip
+GC17,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_GC17_Mouse_Eye,LSDS-1_immunostaining_GC17_Mouse_Eye.zip
+GC17,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_GC17_Mouse_Eye,LSDS-1_immunostaining_GC17_Mouse_Eye.zip
+GC18,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC18_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_GC18_ Mouse_Eye_PECAM.zip
+GC18,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC18_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_GC18_ Mouse_Eye_ZO.zip
+GC18,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_GC18_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_GC18_ Mouse_Eye_TUNEL.zip
+GC18,OSD-557,histology,LSDS-1_Histology_GC18_RR9_Ret_2X_10X_HE,LSDS-1_Histology_GC18_RR9_Ret_2X_10X_HE.zip
+GC18,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_GC18_Mouse_Eye,LSDS-1_immunostaining_GC18_Mouse_Eye.zip
+GC18,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_GC18_Mouse_Eye,LSDS-1_immunostaining_GC18_Mouse_Eye.zip
+GC19,OSD-568,PECAM-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC19_ Mouse_Eye_PECAM,LSDS-5_immunostaining_microscopy_GC19_ Mouse_Eye_PECAM.zip
+GC19,OSD-568,ZO-1 Immunostaining,LSDS-5_immunostaining_microscopy_GC19_ Mouse_Eye_ZO,LSDS-5_immunostaining_microscopy_GC19_ Mouse_Eye_ZO.zip
+GC19,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_GC19_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_GC19_ Mouse_Eye_TUNEL.zip
+GC19,OSD-557,histology,LSDS-1_Histology_GC19_RR9_Ret_2X_10X_HE,LSDS-1_Histology_GC19_RR9_Ret_2X_10X_HE.zip
+GC19,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_GC19_Mouse_Eye,LSDS-1_immunostaining_GC19_Mouse_Eye.zip
+GC19,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_GC19_Mouse_Eye,LSDS-1_immunostaining_GC19_Mouse_Eye.zip
+GC20,OSD-568,ZO-1 Immunostaining,Not Available,Not Available
+GC20,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_GC20_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_GC20_ Mouse_Eye_TUNEL.zip
+GC20,OSD-557,histology,LSDS-1_Histology_GC20_RR9_Ret_2X_10X_HE,LSDS-1_Histology_GC20_RR9_Ret_2X_10X_HE.zip
+GC20,OSD-557,Microscopy And Imaging Parameters Protocol - PNA,LSDS-1_immunostaining_GC20_Mouse_Eye,LSDS-1_immunostaining_GC20_Mouse_Eye.zip
+Viv15,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_V15_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_V15_ Mouse_Eye_TUNEL.zip
+Viv16,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_V16_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_V16_ Mouse_Eye_TUNEL.zip
+Viv17,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_V17_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_V17_ Mouse_Eye_TUNEL.zip
+Viv18,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_V18_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_V18_ Mouse_Eye_TUNEL.zip
+Viv19,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_V19_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_V19_ Mouse_Eye_TUNEL.zip
+Viv20,OSD-568,TUNEL Assay,LSDS-5_immunostaining_microscopy_V20_ Mouse_Eye_TUNEL,LSDS-5_immunostaining_microscopy_V20_ Mouse_Eye_TUNEL.zip
+Viv15,OSD-557,histology,LSDS-1_Histology_V15_RR9_Ret_2X_HE_24,LSDS-1_Histology_V15_RR9_Ret_2X_HE_24.zip
+Viv15,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_Viv15_Mouse_Eye,LSDS-1_immunostaining_Viv15_Mouse_Eye.zip
+Viv16,OSD-557,histology,LSDS-1_Histology_V16_RR9_Ret_2X_HE_25,LSDS-1_Histology_V16_RR9_Ret_2X_HE_25.zip
+Viv16,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_Viv16_Mouse_Eye,LSDS-1_immunostaining_Viv16_Mouse_Eye.zip
+Viv17,OSD-557,histology,LSDS-1_Histology_V17_RR9_Ret_2X_HE_26,LSDS-1_Histology_V17_RR9_Ret_2X_HE_26.zip
+Viv17,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_Viv17_Mouse_Eye,LSDS-1_immunostaining_Viv17_Mouse_Eye.zip
+Viv18,OSD-557,histology,LSDS-1_Histology_V18_RR9_Ret_2X_HE_27,LSDS-1_Histology_V18_RR9_Ret_2X_HE_27.zip
+Viv18,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_Viv18_Mouse_Eye,LSDS-1_immunostaining_Viv18_Mouse_Eye.zip
+Viv19,OSD-557,histology,LSDS-1_Histology_V19_RR9_Ret_2X_HE_28,LSDS-1_Histology_V19_RR9_Ret_2X_HE_28.zip
+Viv19,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_Viv19_Mouse_Eye,LSDS-1_immunostaining_Viv19_Mouse_Eye.zip
+Viv20,OSD-557,histology,LSDS-1_Histology_V20_RR9_Ret_2X_HE_29,LSDS-1_Histology_V20_RR9_Ret_2X_HE_29.zip
+Viv20,OSD-557,Microscopy And Imaging Parameters Protocol - HNE,LSDS-1_immunostaining_Viv20_Mouse_Eye,LSDS-1_immunostaining_Viv20_Mouse_Eye.zip

@@ -37,6 +37,8 @@ from sklearn.ensemble import BaggingRegressor
 from lightgbm import LGBMRegressor
 import joblib
 import requests
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import linkage, leaves_list, dendrogram
 import logging
 import os
 
@@ -50,6 +52,8 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 merged_flight_data = pd.read_csv('merged_flight_data.csv', sep=",")
 merged_non_flight_data = pd.read_csv('merged_non_flight_data.csv', sep=",")
 
+full_df = pd.concat([merged_flight_data, merged_non_flight_data], ignore_index=True)
+
 flight_column_order = ['Source Name', 'Group']+list(merged_flight_data.corr(numeric_only=True)['Total_tunel'].sort_values(ascending=False).index)
 merged_flight_data = merged_flight_data[flight_column_order]
 
@@ -57,6 +61,54 @@ merged_flight_data = merged_flight_data[flight_column_order]
 non_flight_column_order = ['Source Name', 'Group']+list(merged_non_flight_data.corr(numeric_only=True)['Total_tunel'].sort_values(ascending=False).index)
 merged_non_flight_data = merged_non_flight_data[non_flight_column_order]
 ```
+
+```{python}
+
+id_columns = ['Source Name', 'Group']
+clustering_columns = [c for c in full_df.columns if c not in id_columns]
+
+# 2. Compute nullity matrix and correlation
+null_matrix = full_df[clustering_columns].isnull().astype(int)
+null_corr = null_matrix.corr()
+
+# 3. Distance matrix (distance = 1 - abs(correlation))
+distance_matrix = 1 - null_corr.abs()
+np.fill_diagonal(distance_matrix.values, 0)
+distance_matrix = distance_matrix.replace([np.inf, -np.inf], 1).fillna(1)
+
+# 4. Convert to condensed form
+condensed_distance = squareform(distance_matrix.values, checks=False)
+
+# 5. Hierarchical clustering & ordering
+linkage_matrix = linkage(condensed_distance, method='average')
+column_order_indices = leaves_list(linkage_matrix)
+ordered_clustering_columns = [clustering_columns[i] for i in column_order_indices]
+
+plt.figure(figsize=(12,6))
+dendrogram(
+    linkage_matrix,
+    labels=clustering_columns,
+    orientation='top',
+    leaf_rotation=90,
+    truncate_mode='lastp',   # Show only last merged clusters
+    p=25                     # Show only last 25 clusters
+)
+plt.title('Truncated Dendrogram of Columns by Nullity Pattern')
+plt.xlabel('Features')
+plt.ylabel('Distance')
+plt.tight_layout()
+plt.show()
+
+# 6. Final ordered columns: id columns + clustered columns
+final_order = id_columns + ordered_clustering_columns
+ordered_df = full_df[final_order]
+
+
+print("Final optimal column order:", final_order{0:10})
+# ordered_df is ready for imputation, with 'Group' available for grouping!
+
+```
+
 
 
 ## Instead of showing full correlation matrices, show only top N correlations
@@ -127,6 +179,27 @@ fig.show()
 
 ```
 
+### Full Data
+```{python}
+if os.path.exists('full_df_knn2.csv'):
+  full_df_knn2 = pd.read_csv('full_df_knn2.csv')
+else:
+  ss = StandardScaler()
+  imp_knn2 = KNNImputer(n_neighbors=5, weights='distance',)
+  knn_impute_pipe = Pipeline([('scaler', ss), ('knn', imp_knn2)])
+
+  full_df_knn2 = knn_impute_pipe.fit_transform(full_df.drop(columns=['Source Name', 'Group']))
+  full_df_knn2 = knn_impute_pipe.named_steps['scaler'].inverse_transform(full_df_knn2)
+
+  full_df_knn2 = pd.DataFrame(full_df_knn2, columns=full_df.drop(columns=['Source Name', 'Group']).columns.to_list())
+
+  full_df_knn2['Source Name'] = full_df['Source Name']
+  full_df_knn2['Group'] = full_df['Group']
+  full_df_knn2.to_csv('full_df_knn2.csv', index=False)
+  joblib.dump(knn_impute_pipe, 'knn2_impute_full_df_pipeline.joblib')
+fig = plot_correlation_matrix(full_df_knn2, "KNN-2 Correlation Matrix (Top 50x50)")
+fig.show()
+```
 
 ## Random Sample Imputer
 
@@ -188,6 +261,27 @@ fig.show()
 
 ```
 
+### Full Data
+```{python}
+if os.path.exists('full_df_rsi.csv'):
+  rsi_df_non_flight = pd.read_csv('full_df_rsi.csv')
+else:
+  ss = StandardScaler()
+  rsi = RandomSampleImputer()
+  rsi_impute_pipe = Pipeline([('scaler', ss), ('rsi', rsi)])
+  rsi_full_df = rsi_impute_pipe.fit_transform(full_df.drop(columns=['Source Name', 'Group']))
+  rsi_full_df = rsi_impute_pipe.named_steps['scaler'].inverse_transform(rsi_full_df)
+
+  rsi_full_df = pd.DataFrame(rsi_full_df, columns=full_df.drop(columns=['Source Name', 'Group']).columns.to_list())
+  rsi_full_df['Source Name'] = full_df['Source Name']
+  rsi_full_df['Group'] = full_df['Group']
+
+  rsi_full_df.to_csv('full_df_rsi.csv', index=False)
+  joblib.dump(rsi_impute_pipe, 'full_df_rsi.joblib')
+
+fig = plot_correlation_matrix(rsi_df_non_flight, "RSI Correlation Matrix (Top 50x50)")
+fig.show()
+```
 
 ## Multiple Imputation by Chained Equation
 
@@ -209,8 +303,6 @@ Do this multiple times by doing random draws of the data and taking the mean of 
 
 ### MICE with Bagging Regressor
 **Flight Data**
-
-
 ```{python}
 #| label: MICE Bagging Regressor Flight Data
 #| echo: false
@@ -262,4 +354,61 @@ else:
 
 fig = plot_correlation_matrix(df_bag_imputed_non_flight_br, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
 fig.show()
+```
+
+**Full Data**
+
+```{python}
+#| label: MICE Bagging Regressor Full Data
+#| echo: false
+#| cache: true
+
+if os.path.exists('full_imputed_mice_bagger_with_group.csv'):
+  df_imputed = pd.read_csv('non_flight_imputed_mice_bagger.csv')
+else:
+  # Identify columns
+  features = [col for col in ordered_df.columns if col not in ['Source Name', 'Group']]
+  group_col = 'Group'
+
+  # Prepare column transformer: scale features, encode group
+  col_transformer = ColumnTransformer([
+      ('features', StandardScaler(), features),
+      ('group', OneHotEncoder(sparse_output=False, handle_unknown='ignore'), [group_col])
+  ])
+
+  # Combine in a pipeline
+  bagger = BaggingRegressor(random_state=2, n_jobs=-1, warm_start=True, verbose=1)
+  itera_bagger = IterativeImputer(
+      random_state=2, initial_strategy='median', estimator=bagger,
+      max_iter=10, tol=0.01, imputation_order='roman', skip_complete=True, verbose=2
+  )
+
+  impute_pipeline = Pipeline([
+      ('prep', col_transformer),
+      ('imputer', itera_bagger)
+  ])
+
+  # Fit only on data that should be imputed (exclude Source Name)
+  X = ordered_df.drop(columns=['Source Name'])
+
+  impute_pipeline.fit(X)
+  imputed_arr = impute_pipeline.transform(X)
+
+  # Recover column names (features + encoded group labels)
+  encoded_group_names = impute_pipeline.named_steps['prep'].transformers_[1][1].get_feature_names_out([group_col])
+  output_columns = features + list(encoded_group_names)
+
+  # Build DataFrame and add back Source Name
+  df_imputed = pd.DataFrame(imputed_arr, columns=output_columns, index=full_df.index)
+  df_imputed['Source Name'] = full_df['Source Name']
+
+  # Optionally, if you want to recover the original "Group" label, merge it back
+  df_imputed[group_col] = full_df[group_col].values  # original categorical labels
+
+  # Save result and pipeline as before
+  df_imputed.to_csv('full_imputed_mice_bagger_with_group.csv', index=False)
+  joblib.dump(impute_pipeline, 'itera_impute_full_pipeline_with_group.joblib')
+fig = plot_correlation_matrix(df_imputed, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
+fig.show()
+
 ```

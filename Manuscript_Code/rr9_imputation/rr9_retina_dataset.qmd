@@ -238,6 +238,196 @@ plt.show()
 ```
 
 
+
+
+```{python}
+# Nullity Correlation Matrix
+# This step ensures all categories appear, even if all values are False (not missing)
+category_missing = rr9_all_df.isnull().groupby(category_series, axis=1).any()
+
+# Add missing categories as all False if necessary
+for cat in cat_cols:
+    if cat not in category_missing.columns:
+        category_missing[cat] = False
+category_nullity_corr = category_missing.corr().fillna(0)  # Fill NaN with 0 for display
+category_nullity_corr = category_nullity_corr[cat_cols.keys()].loc[cat_cols.keys()]
+plt.figure(figsize=(8,6))
+sns.heatmap(category_nullity_corr, annot=True, cmap='coolwarm_r', center=0, vmin=-1, vmax=1)
+plt.title("Nullity Correlation Matrix by Data Category (All Categories Included)")
+plt.xlabel("Categories")
+plt.ylabel("Categories")
+plt.show()
+```
+
+Final Interpretation
+tonometry:
+
+The row/column is all zeros, indicating there is no missing data in tonometry (and so, by definition, no correlation of missingness with any other category).
+
+The gray/neutral coloring visually reinforces the absence of missingness relationships for this category.
+
+Summary:
+
+- Zeros for categories without missing data (like tonometry).
+
+- Blues for high co-missingness (correlation ≈ 1).
+
+- Reds for opposite-missingness (correlation < 0).
+
+- Whites/near 0 for no relationship.
+
+1. Tonometry
+Row and column of all zeros
+
+Interpretation:
+There is complete data for tonometry—no samples are missing tonometry measurements. It is independent of the missingness of any other category.
+
+2. Clusters of Strong Positive Correlation (Blue, Values ≈ 0.8–1.0)
+pecam, pna, zo1, tunel, hne, maseq:
+These categories have high positive correlations, meaning when a sample is missing data in one, it is typically missing data in the others.
+
+Interpretation:
+These categories likely share experimental steps, batch effects, or biological circumstances leading to simultaneous missingness. For example, if a tissue sample was lost or not processed further, all dependent assays (pecam, pna, zo1, tunel, hne, maseq) might be missing for that case.
+
+3. microct
+Low correlations (values near zero or slightly negative) with other categories
+
+Interpretation:
+Missingness in microct is largely independent of other categories. If a sample is missing microct data, it doesn’t predict missingness in other categories and vice versa. microct may face independent measurement or processing issues.
+
+4. protein
+Mostly weak or negative correlations with other categories
+
+Interpretation:
+protein’s missingness does not closely follow others; it may have unique reasons for being absent (different protocol, failed assay, etc.).
+
+5. Negative Correlations (Red, e.g. ~ -0.16 for maseq/protein, pecam/protein, etc.)
+Interpretation:
+There is a slight tendency for samples missing one of these pairs to be present in the other. Not a strong effect, but it may point to mutually exclusive failures in certain scenarios.
+
+### Summary Table of Patterns
+|Category   |Strongly Linked Missingness    |Independent/Negative    |
+|-----------|-------------------------------|------------------------|
+|tonometry|None (always complete)|All|
+|pecam, pna, zo1, tunel, hne, maseq|Each other (clustered)|microct, protein|
+|microct|None|Other categories(mostly weak)|
+|protein|None|Whitish to red with others|
+
+### Practical Actions
+Impute or interpret missingness jointly for the strongly linked group (pecam, pna, zo1, tunel, hne, maseq).
+
+Handle microct and protein separately, as their missing data mechanisms are independent.
+
+No missingness work is needed for tonometry.
+
+## Little's MCAR Test
+```{python}
+from sklearn.linear_model import LogisticRegression
+
+results = {}
+for cat in category_missing.columns:
+    X = category_missing.drop(columns=cat)
+    y = category_missing[cat]
+    # Skip if y has only one class (all 0s or all 1s)
+    if y.nunique() < 2:
+        print(f"Skipping {cat}: only one class present in missingness indicator.")
+        continue
+    clf = LogisticRegression()
+    clf.fit(X, y)
+    score = clf.score(X, y)
+    results[cat] = score
+
+print("Model accuracy for predicting missingness in each category:")
+print(results)
+
+```
+
+Tonometry was skipped (only one class—no missing values, so nothing to model or impute).
+
+For all other categories, the logistic regression models predict missingness very accurately (scores from 0.88 to 1.0).
+
+- Interpretation:
+    - High accuracy for all other categories (~0.88–1.0):
+
+    - The missingness in each of these categories is highly predictable from the missingness in other categories.
+
+    - This is strong evidence for the MAR (Missing At Random) mechanism:
+
+    - Missingness depends on observed data (other categories), not on unobserved values within the category itself.
+
+It also shows the missing data structure is very systematic, not random!
+
+- Imputation guidance:
+
+    - Since missingness is MAR, multivariate imputation methods (like MICE or KNNImputer) are recommended because they use information from other variables when filling in missing values.
+
+    - Avoid simple mean/median imputation: it ignores the structure you’ve discovered.
+
+
+| Category   | Skipped | Model Accuracy | Missingness Mechanism Suggestion   | Imputation Recommendation            |
+|------------|---------|----------------|------------------------------------|--------------------------------------|
+| tonometry  | Yes     | —              | Complete data (no missingness)     | None needed                          |
+| hne        | No      | 0.98           | MAR                                | Use multivariate methods (e.g., MICE)|
+| microct    | No      | 0.88           | MAR                                | Use multivariate methods             |
+| pecam      | No      | 1.00           | MAR (perfectly explained)          | Use multivariate methods             |
+| pna        | No      | 0.99           | MAR                                | Use multivariate methods             |
+| protein    | No      | 0.88           | MAR                                | Use multivariate methods             |
+| rnaseq     | No      | 0.95           | MAR                                | Use multivariate methods             |
+| tunel      | No      | 0.98           | MAR                                | Use multivariate methods             |
+| zo1        | No      | 0.99           | MAR                                | Use multivariate methods             |
+
+***
+
+```{python}
+# %%
+import pandas as pd
+import numpy as np
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import linkage, dendrogram
+import matplotlib.pyplot as plt
+
+# --- Assume you already have: ---
+# full_df               : your main DataFrame
+# cat_cols (dict)       : {'category1': [colA, colB, ...], ...} for all categories
+
+# 1. Build category-level nullity matrix
+category_null_matrix = pd.DataFrame(index=rr9_all_df.index)
+
+for cat, cols in cat_cols.items():
+    present_cols = [col for col in cols if col in rr9_all_df.columns]
+    # Category is "missing" if ALL its columns are missing in a row; change .all() to .any() for stricter/looser rule
+    category_null_matrix[cat] = rr9_all_df[present_cols].isnull().all(axis=1).astype(int)
+
+# 2. Compute correlation and distance matrix among categories
+null_corr = category_null_matrix.corr()
+distance_matrix = 1 - null_corr.abs()
+np.fill_diagonal(distance_matrix.values, 0)
+distance_matrix = distance_matrix.replace([np.inf, -np.inf], 1).fillna(1)
+
+condensed_distance = squareform(distance_matrix.values, checks=False)
+
+# 3. Cluster and plot vertical dendrogram
+linkage_matrix = linkage(condensed_distance, method='average')
+
+plt.figure(figsize=(6, 8))
+dendrogram(
+    linkage_matrix,
+    labels=list(cat_cols.keys()),
+    orientation='right',   # vertical dendrogram, labels on y-axis
+    leaf_rotation=0
+)
+plt.title('Vertical Dendrogram of Column Categories by Nullity Pattern')
+plt.xlabel('Distance')
+plt.ylabel('Category')
+plt.tight_layout()
+plt.show()
+```
+
+
+**Next Steps:**
+- Proceed with a multivariate imputation approach for the MAR categories.
+- No imputation needed for `tonometry`.
+
 ```{python}
 #| echo: False
 #| label: PCA Function Definition

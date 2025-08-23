@@ -6,6 +6,8 @@ format:
     html:
         toc: true
         toc-depth: 5
+        fig-width: 8
+        fig-height: 8
         code-fold: true
         page-layout: full
         code-overflow: wrap 
@@ -26,47 +28,44 @@ If the final values are p embeddings are not due to lack of images, then appropr
 ``` {python}
 #| label: Import libraries
 #| echo: false
- 
 import pandas as pd
 import natsort
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
+import os
+import zipfile
+import numpy as np
+from PIL import Image
+from sklearn.neural_network import MLPClassifier
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+import plotly.express as px
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.model_selection import train_test_split
+import cv2
+import warnings
+warnings.filterwarnings("ignore")
 
 ```
 
 ## Data
 ### Images List to be Downloaded for Different Samples and Assays
 
-| Sample Name | OSD Study ID | Assay Name | Raw Data File                                |
-| ----------- | ------------ | ---------- | -------------------------------------------- |
-| Viv20       | OSD-557      | histology  | LSDS-1_Histology_V20_RR9_Ret_2X_HE_29.zip    |
-| Viv19       | OSD-557      | histology  | LSDS-1_Histology_V19_RR9_Ret_2X_HE_28.zip    |
-| Viv18       | OSD-557      | histology  | LSDS-1_Histology_V18_RR9_Ret_2X_HE_27.zip    |
-| Viv17       | OSD-557      | histology  | LSDS-1_Histology_V17_RR9_Ret_2X_HE_26.zip    |
-| Viv16       | OSD-557      | histology  | LSDS-1_Histology_V16_RR9_Ret_2X_HE_25.zip    |
-| Viv15       | OSD-557      | histology  | LSDS-1_Histology_V15_RR9_Ret_2X_HE_24.zip    |
-| GC20        | OSD-557      | histology  | LSDS-1_Histology_GC20_RR9_Ret_2X_10X_HE.zip  |
-| GC19        | OSD-557      | histology  | LSDS-1_Histology_GC19_RR9_Ret_2X_10X_HE.zip  |
-| GC18        | OSD-557      | histology  | LSDS-1_Histology_GC18_RR9_Ret_2X_10X_HE.zip  |
-| GC17        | OSD-557      | histology  | LSDS-1_Histology_GC17_RR9_Ret_2X_10X_HE.zip  |
-| GC16        | OSD-557      | histology  | LSDS-1_Histology_GC16_RR9_Ret_2X_10X_HE.zip  |
-| GC15        | OSD-557      | histology  | LSDS-1_Histology_GC15_RR9_Ret_2X_10X_HE.zip  |
-| F20         | OSD-557      | histology  | LSDS-1_Histology_F20_RR9_Ret_2X_10X_HE.zip   |
-| F19         | OSD-557      | histology  | LSDS-1_Histology_F19_RR9_Ret_2X_10X_HE.zip   |
-| F18         | OSD-557      | histology  | LSDS-1_Histology_F18_RR9_Ret_2X__10X_HE.zip  |
-| F17         | OSD-557      | histology  | LSDS-1_Histology_F17_RR9_Ret_2X__10X_HE.zip  |
-| F16         | OSD-557      | histology  | LSDS-1_Histology_F16_RR9_Ret_2X__10X_HE.zip  |
-| F15         | OSD-557      | histology  | LSDS-1_Histology_F15_RR9_Ret_2X__10X_HE.zip  |
-| CC2_20      | OSD-557      | histology  | LSDS-1_Histology_CC2_20_RR9_Ret_2X_HE_34.zip |
-| CC2_18      | OSD-557      | histology  | LSDS-1_Histology_CC2_18_RR9_Ret_2X_HE_33.zip |
-| CC2_17      | OSD-557      | histology  | LSDS-1_Histology_CC2_17_RR9_Ret_2X_HE_32.zip |
-| CC2_16      | OSD-557      | histology  | LSDS-1_Histology_CC2_16_RR9_Ret_2X_HE_31.zip |
-| CC2_15      | OSD-557      | histology  | LSDS-1_Histology_CC2_15_RR9_Ret_2X_HE_30.zip |
+```{python}
+#| cache: true
+#| echo: false
+image_dir_df = pd.read_csv('image_directories.csv')
+image_dir_df
+```
 
 ### Imges vs Assay Values for the Samples
 ```{python}
 #| echo: false
-
+#| cache: true
 df = pd.read_csv('data_presence_for_embeddings.txt', delim_whitespace=True)
 df = df.set_index('Source_Name')
 df = df.reindex(natsort.natsorted(df.index))
@@ -81,4 +80,552 @@ ax.set_ylabel("Categories")
 ax.set_title('Heatmap of Data Availability per Category', fontsize=20, fontweight="bold")
 plt.show()
 
+```
+
+
+```{python}
+#| label: Download and extract files
+#| echo: false
+def download_and_extract_images():
+    response = requests.get("https://osdr.nasa.gov/osdr/data/osd/files/557").json()
+    
+    # Create downloads directory
+    os.makedirs('downloads', exist_ok=True)
+    
+    # Get links for files with subdirectory 'Raw Image Files' or 'Raw Image'
+    download_links = []
+    for file_info in response['studies']['OSD-557']['study_files']:
+        if file_info['subdirectory'] in ['Raw Image Files', 'Raw Image']:
+            file_url = f"https://osdr.nasa.gov{file_info['remote_url']}"
+            download_links.append((file_info['file_name'], file_url))
+    
+    # Download, unzip, and delete zip files
+    for name, url in download_links:
+        file_response = requests.get(url)
+        zip_path = f'downloads/{name}'
+        
+        # Download zip file
+        with open(zip_path, 'wb') as f:
+            f.write(file_response.content)
+        
+        # Unzip and delete original
+        if name.endswith('.zip'):
+            extract_folder = f'downloads/{name[:-4]}'  # Remove .zip extension
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_folder)
+            os.remove(zip_path)
+        
+        print(f"Downloaded and extracted: {name}")
+```
+
+
+```{python}
+#| output: false
+#| label: Feature selection
+#| echo: false
+def select_features(X, y, k=1024):
+    selector = SelectKBest(score_func=f_classif, k=k)
+    X_selected = selector.fit_transform(X, y)
+    return X_selected, selector
+```
+
+
+```{python}
+#| label: Build and train model
+#| echo: false
+#| output: false
+def build_and_train_model(X_selected, y):
+    # Encode labels
+    le = LabelEncoder()
+    y_encoded = le.fit_transform(y)
+    
+    # Build model
+    input_layer = layers.Input(shape=(X_selected.shape[1],))
+    x = layers.Dense(2048, activation='relu')(input_layer)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(1024, activation='relu')(x)
+    x = layers.Dropout(0.2)(x)
+    x = layers.Dense(512, activation='relu')(x)
+    embedding_layer = layers.Dense(25, activation='relu')(x)
+    x = layers.Dropout(0.3)(embedding_layer)
+    output_layer = layers.Dense(len(np.unique(y_encoded)), activation='softmax')(x)
+
+    model = Model(inputs=input_layer, outputs=output_layer)
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+    # Train with early stopping
+    X_train, X_test, y_train, y_test = train_test_split(X_selected, y_encoded, test_size=0.2, random_state=42)
+    early_stop = EarlyStopping(patience=5, restore_best_weights=True)
+    model.fit(X_train, y_train, epochs=50, validation_data=(X_test, y_test), callbacks=[early_stop])
+
+    # Evaluate model
+    y_pred = model.predict(X_test)
+    y_pred_classes = np.argmax(y_pred, axis=1)
+    accuracy = accuracy_score(y_test, y_pred_classes)
+    print(f"Validation Accuracy: {accuracy:.4f}")
+    print(classification_report(y_test, y_pred_classes))
+
+    return model, embedding_layer, input_layer, le, y_encoded
+def extract_embeddings(model, embedding_layer, input_layer, X_selected, y, le):
+    # Extract embeddings from all samples
+    embedding_model = Model(inputs=input_layer, outputs=embedding_layer)
+    all_embeddings = embedding_model.predict(X_selected)
+    
+    # Get one embedding per label (average)
+    unique_labels = np.unique(y)
+    label_embeddings = []
+    for label in unique_labels:
+        label_mask = y == label
+        avg_embedding = np.mean(all_embeddings[label_mask], axis=0)
+        label_embeddings.append(avg_embedding)
+
+    final_embeddings = np.array(label_embeddings)
+    
+    # Create DataFrame with embeddings and labels
+    embedding_df = pd.DataFrame(final_embeddings, 
+                               columns=[f'embedding_{i}' for i in range(25)])
+    embedding_df['label'] = unique_labels
+    
+    # Add group column
+    def get_group(sample_name):
+        if sample_name.startswith('GC'):
+            # return 'GC'
+            return 'Non-Flight'
+        elif sample_name.startswith('Viv'):
+            # return 'Viv'
+            return 'Non-Flight'
+        elif sample_name.startswith('F'):
+            return 'Flight'
+        elif sample_name.startswith('CC2'):
+            # return 'CC2'
+            return 'Non-Flight'
+        else:
+            return 'Other'
+    
+    embedding_df['group'] = embedding_df['label'].apply(get_group)
+    return embedding_df
+```
+
+```{python}
+#| output: false
+#| label: Extract CNN features using VGG16
+#| echo: false
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.applications.vgg16 import preprocess_input
+def extract_cnn_features_vgg16(image_paths):
+    base_model = VGG16(
+        weights='imagenet', 
+        include_top=False, 
+        pooling='avg',
+        )
+    features = []
+    
+    for img_path in image_paths:
+        img = cv2.imread(img_path)
+        img = cv2.resize(img, (224, 224))
+        img = preprocess_input(np.expand_dims(img, axis=0))
+        feature = base_model.predict(img, verbose=0)
+        features.append(feature.flatten())
+    
+    return np.array(features)
+```
+
+```{python}
+#| label: Transformer for generating labels
+#| echo: false
+#| output: false
+from transformers import AutoImageProcessor, Dinov2Model
+import torch
+
+def extract_dinov2_features_with_layers(image_paths, layer_idx=-1):
+    processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
+    model = Dinov2Model.from_pretrained('facebook/dinov2-base')
+    
+    features = []
+    for img_path in image_paths:
+        img = cv2.imread(img_path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        inputs = processor(images=img, return_tensors="pt",use_fast=True)
+        
+        with torch.no_grad():
+            outputs = model(**inputs, output_hidden_states=True)
+            # Extract from specific layer
+            if layer_idx == -1:
+                # Use CLS token from last layer
+                embedding = outputs.last_hidden_state[:, 0, :].numpy().flatten()
+            else:
+                # Use CLS token from specific hidden layer
+                embedding = outputs.hidden_states[layer_idx][:, 0, :].numpy().flatten()
+            features.append(embedding)
+    
+    return np.array(features)
+```
+
+```{python}
+#| label: Generate PCA plots
+#| echo: false
+def generate_pca_plots(embedding_df, assay_name):
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.decomposition import PCA
+    
+    # Extract embedding columns
+    embedding_cols = [col for col in embedding_df.columns if col.startswith('embedding_')]
+    X_embeddings = embedding_df[embedding_cols]
+    
+    # Standard scale the data
+    # scaler = StandardScaler()
+    # X_scaled = scaler.fit_transform(X_embeddings)
+    
+    # Apply 3D PCA
+    pca = PCA(n_components=10, random_state=42)
+    # pca_results = pca.fit_transform(X_scaled)
+    pca_results = pca.fit_transform(X_embeddings)
+    
+    # Create 3D scatter plot
+    fig = px.scatter_3d(x=pca_results[:, 0], y=pca_results[:, 1], z=pca_results[:, 2],
+                        color=embedding_df['group'], 
+                        hover_data={'label': embedding_df['label']},
+                        title=f'3D PCA of Embeddings by Group - {assay_name}')
+    fig.show()
+    
+    return pca_results
+```
+
+
+```{python}
+#| label: Process assays and generate embeddings Using CNN
+#| echo: false
+def process_assays_and_generate_embeddings_dense_cnn():
+    # Load image directory dataframe
+    image_dir_df = pd.read_csv('/Users/vaishnavinagesh/Desktop/AI-ML_AWG/Manuscript_Code/rr9_imputation/image_directories.csv')
+    
+    # Process each assay separately and generate embeddings for each
+    embedding_dfs = {}  # Dictionary to store embeddings per assay
+    
+    # Get unique assay names
+    unique_assays = image_dir_df['Assay Name'].unique()
+    
+    for assay in unique_assays:
+        print(f"\n=== Processing assay: {assay} ===")
+        
+        X = []
+        y = []
+        
+        # Filter dataframe for current assay
+        assay_df = image_dir_df[image_dir_df['Assay Name'] == assay]
+        
+        for idx, row in assay_df.iterrows():
+            directory_path = row['Directory']
+            label = row['Sample Name']
+
+            for root, dirs, files in os.walk(f'/Users/vaishnavinagesh/Desktop/AI-ML_AWG/download_images/{directory_path}'):
+                for file in files:
+                    if (file.lower().endswith(('.tif', '.tiff', '.png', '.bmp')) and 
+                        not file.startswith('._')):
+                        img_path = os.path.join(root, file)
+                        try:
+                            img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+                            if img is not None:
+                                img_resized = cv2.resize(img, (256, 256))
+                                img_array = np.array(img_resized).flatten()
+                                X.append(img_array)
+                                y.append(label)
+                        except Exception as e:
+                            continue
+
+        if X:  # Only process if images were found
+            X = np.array(X)
+            y = np.array(y)
+            print(f"Found {len(X)} images for assay {assay}")
+            
+            # Feature selection for this assay
+            print("Selecting features...")
+            X_selected, selector = select_features(X, y, k=1024)
+            print(f"Selected {X_selected.shape[1]} features")
+            
+            # Train model for this assay
+            print("Training model...")
+            model, embedding_layer, input_layer, le, y_encoded = build_and_train_model(X_selected, y)
+            
+            # Extract embeddings for this assay
+            print("Extracting embeddings...")
+            embedding_df = extract_embeddings(model, embedding_layer, input_layer, X_selected, y, le)
+            
+            # Store in dictionary
+            embedding_dfs[assay] = embedding_df
+            print(f"Generated embeddings for {assay}: {embedding_df.shape}")
+            
+            # Generate t-SNE plot for this assay
+            print("Generating t-SNE plot...")
+            tsne_results = generate_pca_plots(embedding_df, assay)
+            
+        else:
+            print(f"No images found for assay {assay}")
+    
+    return embedding_dfs
+```
+
+
+```{python}
+#| label: Process Samples Per Assay and Generate Embeddings Transfomer
+#| echo: false
+
+def process_assays_and_generate_embeddings_transformer():
+    # Load image directory dataframe
+    image_dir_df = pd.read_csv('/Users/vaishnavinagesh/Desktop/AI-ML_AWG/Manuscript_Code/rr9_imputation/image_directories.csv')
+    
+    embedding_dfs = {}
+    unique_assays = image_dir_df['Assay Name'].unique()
+    
+    for assay in unique_assays:
+        print(f"\n=== Processing assay: {assay} ===")
+        
+        image_paths = []
+        y = []
+        
+        assay_df = image_dir_df[image_dir_df['Assay Name'] == assay]
+        
+        for idx, row in assay_df.iterrows():
+            directory_path = row['Directory']
+            label = row['Sample Name']
+
+            for root, dirs, files in os.walk(f'/Users/vaishnavinagesh/Desktop/AI-ML_AWG/download_images/{directory_path}'):
+                for file in files:
+                    if (file.lower().endswith(('.tif', '.tiff', '.png', '.bmp')) and 
+                        not file.startswith('._')):
+                        img_path = os.path.join(root, file)
+                        if cv2.imread(img_path) is not None:
+                            image_paths.append(img_path)
+                            y.append(label)
+
+        if image_paths:
+            print(f"Found {len(image_paths)} images for assay {assay}")
+            
+            # Test different layers to find best one
+            print("Testing different DINOV2 layers...")
+            layer_results = {}
+            best_embeddings = None
+            best_unique_labels = None
+            
+            def get_group(sample_name):
+                if sample_name.startswith('GC'): return 'Non-Flight'
+                elif sample_name.startswith('Viv'): return 'Non-Flight'
+                elif sample_name.startswith('F'): return 'Flight'
+                elif sample_name.startswith('CC2'): return 'Non-Flight'
+                else: return 'Other'
+            
+            for layer in [-1, -2, -3, -4]:  # Test last 4 layers
+                print(f"Testing layer {layer}...")
+                all_embeddings = extract_dinov2_features_with_layers(image_paths, layer)
+                y_array = np.array(y)
+                
+                # Select embedding with highest L2 norm per label
+                unique_labels = np.unique(y_array)
+                label_embeddings = []
+                for label in unique_labels:
+                    label_mask = y_array == label
+                    label_embeddings_subset = all_embeddings[label_mask]
+                    norms = np.linalg.norm(label_embeddings_subset, axis=1)
+                    strongest_idx = np.argmax(norms)
+                    strongest_embedding = label_embeddings_subset[strongest_idx]
+                    label_embeddings.append(strongest_embedding)
+
+                final_embeddings = np.array(label_embeddings)
+                
+                # Quick SVM test
+                from sklearn.svm import SVC
+                from sklearn.model_selection import cross_val_score
+                from sklearn.preprocessing import LabelEncoder, StandardScaler
+                
+                embedding_df_temp = pd.DataFrame(final_embeddings, columns=[f'embedding_{i}' for i in range(768)])
+                embedding_df_temp['label'] = unique_labels
+                embedding_df_temp['group'] = embedding_df_temp['label'].apply(get_group)
+                
+                X_embeddings = embedding_df_temp[[col for col in embedding_df_temp.columns if col.startswith('embedding_')]]
+                # X_scaled = StandardScaler().fit_transform(X_embeddings)
+                group_encoded = LabelEncoder().fit_transform(embedding_df_temp['group'])
+                
+                svm = SVC(kernel='rbf', random_state=42, class_weight='balanced')
+                f1_scores = cross_val_score(svm, X_embeddings, group_encoded, cv=5, scoring='f1_macro')
+                layer_results[layer] = f1_scores.mean()
+                print(f"Layer {layer} F1-Score: {f1_scores.mean():.4f}")
+                
+                # Keep best embeddings
+                if best_embeddings is None or f1_scores.mean() > max(layer_results.values()):
+                    best_embeddings = final_embeddings
+                    best_unique_labels = unique_labels
+            
+            # Use best embeddings for final analysis
+            best_layer = max(layer_results, key=layer_results.get)
+            print(f"Best layer: {best_layer} with F1-Score: {layer_results[best_layer]:.4f}")
+            
+            # Create DataFrame with best embeddings
+            embedding_df = pd.DataFrame(best_embeddings, 
+                                       columns=[f'embedding_{i}' for i in range(768)])
+            embedding_df['label'] = best_unique_labels
+            embedding_df['group'] = embedding_df['label'].apply(get_group)
+            
+            # Final SVM evaluation
+            from sklearn.model_selection import cross_validate
+            from sklearn.decomposition import PCA
+            
+            embedding_cols = [col for col in embedding_df.columns if col.startswith('embedding_')]
+            X_embeddings = embedding_df[embedding_cols]
+            # scaler = StandardScaler()
+            # X_scaled = scaler.fit_transform(X_embeddings)
+            
+            le = LabelEncoder()
+            group_encoded = le.fit_transform(embedding_df['group'])
+            
+            print(f"\n=== Final SVM Results (Layer {best_layer}) ===")
+            svm = SVC(kernel='rbf', random_state=42, class_weight='balanced')
+            scoring = ['accuracy', 'precision_macro', 'recall_macro', 'f1_macro']
+            cv_results = cross_validate(svm, X_embeddings, group_encoded, cv=5, scoring=scoring)
+            print(f"Accuracy: {cv_results['test_accuracy'].mean():.4f} (+/- {cv_results['test_accuracy'].std() * 2:.4f})")
+            print(f"Precision: {cv_results['test_precision_macro'].mean():.4f} (+/- {cv_results['test_precision_macro'].std() * 2:.4f})")
+            print(f"Recall: {cv_results['test_recall_macro'].mean():.4f} (+/- {cv_results['test_recall_macro'].std() * 2:.4f})")
+            print(f"F1-Score: {cv_results['test_f1_macro'].mean():.4f} (+/- {cv_results['test_f1_macro'].std() * 2:.4f})")
+            
+            embedding_dfs[assay] = embedding_df
+
+            # # Project to 2D
+            # pca_2d = PCA(n_components=2, random_state=42)
+            # X_2d = pca_2d.fit_transform(X_embeddings)
+            
+            # # Create simple scatter plot
+            # fig = px.scatter(x=X_2d[:, 0], y=X_2d[:, 1], 
+            #                color=embedding_df['group'],
+            #                hover_data={'label': embedding_df['label']},
+            #                title=f'Best Layer ({best_layer}) SVM Data (2D PCA) - {assay}')
+            # fig.show()
+            generate_pca_plots(embedding_df, assay)
+
+    
+    return embedding_dfs
+
+
+```
+
+
+```{python}
+#| label: Process Samples Per Assay and Generate Embeddings VGG16
+#| echo: false
+
+def process_assays_and_generate_embeddings_vgg16():
+    # Load image directory dataframe
+    image_dir_df = pd.read_csv('/Users/vaishnavinagesh/Desktop/AI-ML_AWG/Manuscript_Code/rr9_imputation/image_directories.csv')
+    
+    embedding_dfs = {}
+    unique_assays = image_dir_df['Assay Name'].unique()
+    
+    for assay in unique_assays:
+        print(f"\n=== Processing assay: {assay} ===")
+        
+        image_paths = []
+        y = []
+        
+        assay_df = image_dir_df[image_dir_df['Assay Name'] == assay]
+        
+        for idx, row in assay_df.iterrows():
+            directory_path = row['Directory']
+            label = row['Sample Name']
+
+            for root, dirs, files in os.walk(f'/Users/vaishnavinagesh/Desktop/AI-ML_AWG/download_images/{directory_path}'):
+                for file in files:
+                    if (file.lower().endswith(('.tif', '.tiff', '.png', '.bmp')) and 
+                        not file.startswith('._')):
+                        img_path = os.path.join(root, file)
+                        if cv2.imread(img_path) is not None:
+                            image_paths.append(img_path)
+                            y.append(label)
+
+        if image_paths:
+            print(f"Found {len(image_paths)} images for assay {assay}")
+            
+            # Extract ResNet features directly as embeddings
+            print("Extracting VGG16 embeddings...")
+            all_embeddings = extract_cnn_features_vgg16(image_paths)
+            y = np.array(y)
+            
+            # Select embedding with highest L2 norm per label
+            unique_labels = np.unique(y)
+            label_embeddings = []
+            for label in unique_labels:
+                label_mask = y == label
+                label_embeddings_subset = all_embeddings[label_mask]
+                norms = np.linalg.norm(label_embeddings_subset, axis=1)
+                strongest_idx = np.argmax(norms)
+                strongest_embedding = label_embeddings_subset[strongest_idx]
+                label_embeddings.append(strongest_embedding)
+
+            final_embeddings = np.array(label_embeddings)
+
+            
+            # Create DataFrame
+            embedding_df = pd.DataFrame(final_embeddings, 
+                                       columns=[f'embedding_{i}' for i in range(512)])
+            embedding_df['label'] = unique_labels
+            
+            # Add group column
+            def get_group(sample_name):
+                if sample_name.startswith('GC'): return 'Non-Flight'
+                elif sample_name.startswith('Viv'): return 'Non-Flight'
+                elif sample_name.startswith('F'): return 'Flight'
+                elif sample_name.startswith('CC2'): return 'Non-Flight'
+                else: return 'Other'
+            
+            embedding_df['group'] = embedding_df['label'].apply(get_group)
+            embedding_dfs[assay] = embedding_df
+
+            
+            # Test separation with SVM
+            from sklearn.svm import SVC
+            from sklearn.model_selection import cross_val_score
+            from sklearn.preprocessing import LabelEncoder, StandardScaler
+            
+            # Get embeddings and scale
+            embedding_cols = [col for col in embedding_df.columns if col.startswith('embedding_')]
+            X_embeddings = embedding_df[embedding_cols]
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X_embeddings)
+            
+            # Encode group labels
+            le = LabelEncoder()
+            group_encoded = le.fit_transform(embedding_df['group'])
+            
+            # SVM classification
+            svm = SVC(kernel='linear', random_state=42)
+            cv_scores = cross_val_score(svm, X_scaled, group_encoded, cv=3, scoring='accuracy')
+            print(f"SVM Separation Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std() * 2:.4f})")
+            
+            embedding_dfs[assay] = embedding_df
+
+    
+    return embedding_dfs
+
+
+
+```
+
+
+# Embeddings with DiNOV2 Transformer
+```{python}
+#| label: Main execution for Transformer
+#| echo: false
+embedding_dfs_transformer = process_assays_and_generate_embeddings_transformer()
+```
+
+# Summary
+```{python}
+#| label: Summary
+#| echo: false
+
+print(f"Generated embeddings for {len(embedding_dfs_transformer)} assays:")
+for assay, df in embedding_dfs_transformer.items():
+    print(f"  {assay}: {df.shape[0]} samples, {df.shape[1]} features")
+
+print("Complete!")
+
+# Access individual assay embeddings like this:
+# embedding_dfs['assay_name'] to get the DataFrame for that assay
 ```

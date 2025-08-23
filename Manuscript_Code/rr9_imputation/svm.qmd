@@ -9,8 +9,6 @@ format:
         page-layout: full
         code-overflow: wrap 
         anchor-sections: true
-        fig-width: 15
-        fig-height: 15
         max-width: 1000px
 ---
 
@@ -20,6 +18,7 @@ To validate the effectiveness of imputation, we propose building a binary classi
 ```{python}
 #| label: Import libraries
 #| echo: false
+#| cache: true
 import pandas as pd
 from itables import show
 import numpy as np
@@ -48,7 +47,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 ```{python}
 #| echo: false
 #| label: Function to Extract and obtain correlation dataframes
-
+#| cache: true
 def corr_df_gen(df_path, corr_coln_name):
     df = pd.read_csv(df_path, sep=',')
     corr_mat = df.corr(numeric_only=True)
@@ -64,12 +63,14 @@ microct_columns = pd.read_csv('microct_columns.csv', header=None)[0].tolist()
 tonometry_columns = pd.read_csv('tonometry_columns.csv', header=None)[0].tolist()
 protein_columns = pd.read_csv('protein_columns.csv', header=None)[0].tolist()
 hne_columns = pd.read_csv('hne_columns.csv', header=None)[0].tolist()
+full_df_imputed = pd.read_csv('full_imputed_mice_bagger_with_group.csv')
 ```
 
 ### Flight Data
 ```{python}
 #| echo: false
 #| label: Check Correlations between Flight Data Before and After Imputation
+#| cache: true
 merged_flight_df, corr_orig_flight_df = corr_df_gen('merged_flight_data.csv', 'corr_orig_flight')
 imp_flight_knn2_df, corr_knn_flight_df = corr_df_gen('flight_imputed_knn2.csv', 'corr_knn2_flight')
 imp_flight_rsi_df, corr_rsi_flight_df = corr_df_gen('flight_imputed_rsi.csv', 'corr_rsi_flight')
@@ -93,6 +94,7 @@ print(stats.spearmanr(merged_corr_df['corr_mice_bagger_flight'], merged_corr_df[
 ```{python}
 #| echo: false
 #| label: Check Correlations between Flight Data Before and After Imputation - Plots
+#| cache: true
 fig,ax = plt.subplots(1,3, figsize=(50, 10.5))
 sns.scatterplot(x = merged_corr_df['corr_orig_flight'], y = merged_corr_df['corr_knn2_flight'],
                 data=merged_corr_df, ax=ax[0])
@@ -108,6 +110,7 @@ sns.scatterplot(x = merged_corr_df['corr_orig_flight'], y = merged_corr_df['corr
 ```{python}
 #| echo: false
 #| label: Check Correlations between Non Flight Data Before and After Imputation
+#| cache: true
 merged_non_flight_df, corr_orig_non_flight_df = corr_df_gen('merged_non_flight_data.csv', 'corr_orig_non_flight')
 imp_non_flight_knn2_df, corr_knn_non_flight_df = corr_df_gen('non_flight_imputed_knn2.csv', 'corr_knn2_non_flight')
 imp_non_flight_rsi_df, corr_rsi_non_flight_df = corr_df_gen('non_flight_imputed_rsi.csv', 'corr_rsi_non_flight')
@@ -130,6 +133,7 @@ print(stats.spearmanr(merged_corr_non_flight_df['corr_mice_bagger_non_flight'], 
 ```{python}
 #| echo: false
 #| label: Check Correlations between Non Flight Data Before and After Imputation - Plots
+#| cache: true
 fig,ax = plt.subplots(1,3, figsize=(50, 10.5))
 sns.scatterplot(x = merged_corr_non_flight_df['corr_orig_non_flight'], y = merged_corr_non_flight_df['corr_knn2_non_flight'],
                 data=merged_corr_non_flight_df, ax=ax[0])
@@ -144,52 +148,80 @@ sns.scatterplot(x = merged_corr_non_flight_df['corr_orig_non_flight'], y = merge
 ```{python}
  #| echo: false
  #| label: SVM Classifier Validation Based on Imputed Data
+ #| cache: true
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import classification_report, accuracy_score
+from sklearn.model_selection import cross_val_score
+
+from sklearn.preprocessing import StandardScaler
+import warnings
 
 def train_svm_classifier(data, label_col='Group'):
-    """
-    Train an SVM classifier to distinguish between flight and non-flight samples.
-    """
     # Prepare features and labels
     X = data.drop(columns=['Source Name', label_col])
-    y = data[label_col].apply(lambda x: 1 if x == 'F' else 0)  # Binary classification: Flight (1) vs Non-Flight (0)
-
+    y = data[label_col].apply(lambda x: 1 if x == 'F' else 0)
+    
+    # Scale features
+    X = StandardScaler().fit_transform(X)
+    
     # Split into train and test sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42, stratify=y)
 
     # Train the SVM classifier
     svm = SGDClassifier(loss='hinge', random_state=42, n_jobs=-1, max_iter=1000, tol=1e-3)
+    
+    # Cross validation
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cv_scores = cross_val_score(svm, X_train, y_train, cv=5, scoring='accuracy')
+    print(f"CV Accuracy: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:.3f})")
+    
     svm.fit(X_train, y_train)
-
-    # Evaluate the classifier
     y_pred = svm.predict(X_test)
+    
     print("Classification Report:")
-    print(classification_report(y_test, y_pred))
+    print(classification_report(y_test, y_pred, zero_division=0))
     print("Accuracy:", accuracy_score(y_test, y_pred))
 
     return svm
+
 ```
 
+
+**SVM on RNA Seq Data Before and After Imputation**
 ```{python}
 #| label: Train and evaluate SVM on RNASeq staining data
 #| echo: false
-print("SVM on RNA Seq Data:")
-
+#| cache: true
 rnaseq_data = rr9_all_df[['Source Name', 'Group'] + rnaseq_columns]
 
 # Drop rows with NaN values
 rnaseq_data_cleaned = rnaseq_data.dropna()
+train_svm_classifier(rnaseq_data_cleaned)
 
+
+rnaseq_data = full_df_imputed[['Source Name', 'Group'] + list(set(full_df_imputed.columns.tolist()) & set(rnaseq_columns))]
+
+# Drop rows with NaN values
+rnaseq_data_cleaned = rnaseq_data.dropna()
 train_svm_classifier(rnaseq_data_cleaned)
 ```
 
+**SVM on HNE Data Before and After Imputation**
 ```{python}
 #| label: Train and evaluate SVM on HNE staining data
 #| echo: false
-print("SVM on HNE Staining Data:")
+#| cache: true
 hne_data = rr9_all_df[['Source Name', 'Group'] + hne_columns]
+
+# Drop rows with NaN values
+hne_data_cleaned = hne_data.dropna()
+
+train_svm_classifier(hne_data_cleaned)
+
+
+hne_data = full_df_imputed[['Source Name', 'Group'] + hne_columns]
 
 # Drop rows with NaN values
 hne_data_cleaned = hne_data.dropna()
@@ -197,11 +229,21 @@ hne_data_cleaned = hne_data.dropna()
 train_svm_classifier(hne_data_cleaned)
 ```
 
+
+**SVM on TUNEL, Proteomics, and Tonometry Data Before and After Imputation**
 ```{python}
 #| label: Train and evaluate SVM on TUNEL data
 #| echo: false
-print("SVM on TUNEL Data:")
+#| cache: true
 tunel_data = rr9_all_df[['Source Name', 'Group'] + tunel_columns]
+
+# Drop rows with NaN values
+tunel_data_cleaned = tunel_data.dropna()
+
+train_svm_classifier(tunel_data_cleaned)
+
+
+tunel_data = full_df_imputed[['Source Name', 'Group'] + tunel_columns]
 
 # Drop rows with NaN values
 tunel_data_cleaned = tunel_data.dropna()
@@ -212,8 +254,16 @@ train_svm_classifier(tunel_data_cleaned)
 ```{python}
 #| label: Train and evaluate SVM on Proteomics data
 #| echo: false
-print("SVM on Protein Data:")
+#| cache: true
+
 protein_data = rr9_all_df[['Source Name', 'Group'] + protein_columns]
+
+# Drop rows with NaN values
+protein_data_cleaned = protein_data.dropna()
+
+train_svm_classifier(protein_data_cleaned)
+
+protein_data = full_df_imputed[['Source Name', 'Group'] + protein_columns]
 
 # Drop rows with NaN values
 protein_data_cleaned = protein_data.dropna()
@@ -224,8 +274,16 @@ train_svm_classifier(protein_data_cleaned)
 ```{python}
 #| label: Train and evaluate SVM on Tonometry data
 #| echo: false
-print("SVM on Tonometry Data:")
+#| cache: true
+
 tonometry_data = rr9_all_df[['Source Name', 'Group'] + tonometry_columns]
+
+# Drop rows with NaN values
+tonometry_data_cleaned = tonometry_data.dropna()
+
+train_svm_classifier(tonometry_data_cleaned)
+
+tonometry_data = full_df_imputed[['Source Name', 'Group'] + tonometry_columns]
 
 # Drop rows with NaN values
 tonometry_data_cleaned = tonometry_data.dropna()
@@ -236,6 +294,7 @@ train_svm_classifier(tonometry_data_cleaned)
 ```{python}
 #| label: Train and evaluate SVM on KNN-imputed data
 #| echo: false
+#| cache: true
 print("SVM on KNN-Imputed Data:")
 knn_imputed_data = pd.concat([imp_flight_knn2_df, imp_non_flight_knn2_df], axis=0)
 train_svm_classifier(knn_imputed_data)
@@ -250,6 +309,7 @@ train_svm_classifier(rsi_imputed_data)
 ```{python}
 #| label: Train and evaluate SVM on MICE with Bagging Regressor-imputed data
 #| echo: false
+#| cache: true
 print("SVM on MICE with Bagging Regressor-Imputed Data:")
 mice_bag_imputed_data = pd.concat([imp_flight_mice_df, imp_non_flight_mice_df], axis=0)
 
@@ -259,3 +319,104 @@ mice_bag_imputed_data = mice_bag_imputed_data.dropna(subset=['Group'])
 train_svm_classifier(mice_bag_imputed_data)
 ```
 
+## PCA on Imputed Data By Merging Flight and Non Flight Data
+```{python}
+#| label: PCA on Imputed Full Dataset After Merging Flight and Non Flight Data
+#| echo: false
+#| cache: true
+imputed_data = pd.concat([imp_flight_rsi_df, imp_non_flight_rsi_df], axis=0).reset_index(drop=True)
+ss = StandardScaler()
+imputed_data_scaled = ss.fit_transform(imputed_data.drop(columns=['Source Name', 'Group']))
+pca = PCA(random_state=2).fit(imputed_data_scaled)
+n = pca.n_components_
+grid = np.arange(1, n + 1)
+evr = pca.explained_variance_ratio_
+
+fig, axs = plt.subplots(1, 2)
+axs[0].bar(grid, evr)
+axs[0].set(
+    xlabel="Component", title="% Explained Variance", ylim=(0.0, round(10*max(evr)+0.5)/10)
+)
+axs[0].title.set_weight('bold')
+axs[0].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+axs[0].set_xticks(grid)
+axs[0].set_xticklabels(grid)
+
+# Cumulative Variance
+cv = np.cumsum(evr)
+ideal_pca_components = np.argmax(cv > 0.95) + 1
+axs[1].plot(grid, cv, "o-")
+axs[1].set(
+    xlabel="Component", title=f"% Cumulative Variance, setting n_components={ideal_pca_components}", ylim=(0.0, 1.01)
+)
+axs[1].title.set_weight('bold')
+axs[1].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+axs[1].set_xticks(grid)
+axs[1].set_xticklabels(grid)
+
+# Cumulative variance value on the 2nd plot
+axs[1].annotate(f'CV={cv[-1]:.3f}', (grid[-1], cv[-1]), textcoords="offset points", xytext=(-15,-10), ha='center')
+
+# Set up figure
+fig.set_size_inches(30, 15)
+
+pca_final = PCA(n_components=ideal_pca_components, random_state=2)
+
+pca_df = pd.DataFrame(pca_final.fit_transform(imputed_data_scaled))
+pca_df.columns = ["PCA_" + str(i) for i in range(1, ideal_pca_components+1)]
+pca_df = pd.concat([imputed_data[['Source Name', 'Group']], pca_df], axis=1)
+
+scatter_plot = px.scatter_3d(pca_df, x='PCA_1', y='PCA_2', z='PCA_3', color='Group', title=f'PCA Projections Against Groups')
+scatter_plot
+```
+
+## PCA on Imputed Data Full Set
+```{python}
+#| label: PCA on Imputed Full Dataset
+#| echo: false
+#| cache: true
+
+ss = StandardScaler()
+imputed_data_scaled = ss.fit_transform(full_df_imputed.drop(columns=['Source Name', 'Group']))
+pca = PCA(random_state=2).fit(imputed_data_scaled)
+n = pca.n_components_
+grid = np.arange(1, n + 1)
+evr = pca.explained_variance_ratio_
+
+fig, axs = plt.subplots(1, 2)
+axs[0].bar(grid, evr)
+axs[0].set(
+    xlabel="Component", title="% Explained Variance", ylim=(0.0, round(10*max(evr)+0.5)/10)
+)
+axs[0].title.set_weight('bold')
+axs[0].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+axs[0].set_xticks(grid)
+axs[0].set_xticklabels(grid)
+
+# Cumulative Variance
+cv = np.cumsum(evr)
+ideal_pca_components = np.argmax(cv > 0.95) + 1
+axs[1].plot(grid, cv, "o-")
+axs[1].set(
+    xlabel="Component", title=f"% Cumulative Variance, setting n_components={ideal_pca_components}", ylim=(0.0, 1.01)
+)
+axs[1].title.set_weight('bold')
+axs[1].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+axs[1].set_xticks(grid)
+axs[1].set_xticklabels(grid)
+
+# Cumulative variance value on the 2nd plot
+axs[1].annotate(f'CV={cv[-1]:.3f}', (grid[-1], cv[-1]), textcoords="offset points", xytext=(-15,-10), ha='center')
+
+# Set up figure
+fig.set_size_inches(30, 15)
+
+pca_final = PCA(n_components=ideal_pca_components, random_state=2)
+
+pca_df = pd.DataFrame(pca_final.fit_transform(imputed_data_scaled))
+pca_df.columns = ["PCA_" + str(i) for i in range(1, ideal_pca_components+1)]
+pca_df = pd.concat([full_df_imputed[['Source Name', 'Group']], pca_df], axis=1)
+
+scatter_plot = px.scatter_3d(pca_df, x='PCA_1', y='PCA_2', z='PCA_3', color='Group', title=f'PCA Projections Against Groups')
+scatter_plot
+```
