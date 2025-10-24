@@ -9,3 +9,4 @@ GenAI/runs
 Working_Code/data_folder_images
 Working_Code/.env
 .vscode/settings.json
+Working_Code/GenAI/__pycache__/*

@@ -10,7 +10,8 @@ def idx2onehot(idx, n):
     if idx.dim() == 1:
         idx = idx.unsqueeze(1)
 
-    onehot = torch.zeros(idx.size(0), n)
+    # Ensure onehot tensor is created on the same device as idx
+    onehot = torch.zeros(idx.size(0), n, device=idx.device)
     onehot.scatter_(1, idx, 1)
 
     return onehot
@@ -47,7 +48,8 @@ class VAE(nn.Module):
         means, log_var = self.encoder.forward(x, c)
 
         std = torch.exp(0.5 * log_var)
-        eps = torch.randn([batch_size, self.latent_size])
+        # Sample epsilon on the same device as means/log_var
+        eps = torch.randn([batch_size, self.latent_size], device=means.device)
         z = eps * std + means
 
         recon_x = self.decoder.forward(z, c)
@@ -58,7 +60,8 @@ class VAE(nn.Module):
         if n == 0:
             n = self.num_labels
         batch_size = n
-        z = torch.randn([batch_size, self.latent_size])
+        # Generate z on the same device as model parameters
+        z = torch.randn([batch_size, self.latent_size], device=next(self.parameters()).device)
 
         recon_x = self.decoder.forward(z, c)
 
@@ -73,7 +76,7 @@ class VAE(nn.Module):
 
         means, log_var = self.encoder.forward(x, c)
         std = torch.exp(0.5 * log_var)
-        eps = torch.randn([1, self.latent_size])
+        eps = torch.randn([1, self.latent_size], device=means.device)
         z = eps * std + means
 
         return z
