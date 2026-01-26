@@ -10,7 +10,9 @@ The Artificial Intelligence and Machine Learning (AI/ML) Analysis Working Group 
 
 ## Current leads:
 - Lauren Sanders, BMSIS / NASA Ames Research Center
-- Jaden J.A. Hastings, XO.LABS
+
+## Digital Twin Subgroup Lead:
+- Jian Gong, University of Wyoming
 
 ## Select one of the following subdirectories to view the group's work:
 - [Manuscript Code](Manuscript_Code)
