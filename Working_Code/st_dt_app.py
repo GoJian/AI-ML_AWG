@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.impute import KNNImputer
-from sklearn.experimental import enable_iterative_imputer  # noqa: F401  # needed for IterativeImputer
+from sklearn.experimental import (
+    enable_iterative_imputer,
+)  # noqa: F401  # needed for IterativeImputer
 from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.ensemble import BaggingRegressor
 from sklearn.pipeline import Pipeline
@@ -24,6 +26,7 @@ try:
     import torch
     import torch.nn as nn
     import torch.optim as optim
+
     TORCH_AVAILABLE = True
 except Exception:
     TORCH_AVAILABLE = False
@@ -31,6 +34,7 @@ except Exception:
 # Import VAE implementation from local GenAI module
 try:
     from GenAI.VAE_RNASeq import VAE as RNASeqVAE
+
     VAE_AVAILABLE = True
 except Exception:
     VAE_AVAILABLE = False
@@ -360,13 +364,8 @@ def acquire_data():
         col + '_tonometry' if col != 'Source Name' else col for col in tonometry.columns
     ]
 
+    # Collect all frames and merge
     dfs = [rnaseq, protein, zo1, tunel, pecam, microct, pna, hne, tonometry]
-
-    # Convert 'Source Name' to string in all DataFrames to avoid dtype conflicts
-    for df in dfs:
-        df['Source Name'] = df['Source Name'].astype(str)
-
-    # Merge all DataFrames on "Source Name" column
     merged_df = dfs[0]
     for df in dfs[1:]:
         merged_df = pd.merge(merged_df, df, on="Source Name", how="outer")
@@ -531,7 +530,15 @@ def _build_vae(input_dim: int, latent_dim: int = 32, hidden: int = 256):
     return model
 
 
-def _train_vae_on_masked_data(X_np: np.ndarray, epochs: int = 300, lr: float = 1e-3, beta: float = 1.0, hidden: int = 256, latent: int = 32, device: str | None = None):
+def _train_vae_on_masked_data(
+    X_np: np.ndarray,
+    epochs: int = 300,
+    lr: float = 1e-3,
+    beta: float = 1.0,
+    hidden: int = 256,
+    latent: int = 32,
+    device: str | None = None,
+):
     """
     Train a VAE to reconstruct X with missing values (NaNs). Loss is computed on observed entries only.
     Returns trained model and reconstruction as numpy array in [0,1] scale (same scale as input X_np).
@@ -576,7 +583,10 @@ def _train_vae_on_masked_data(X_np: np.ndarray, epochs: int = 300, lr: float = 1
 
         losses.append(loss.detach().item())
         if ep % max(1, epochs // 100) == 0 or ep == epochs:
-            progress.progress(min(1.0, ep / epochs), text=f"Training VAE... epoch {ep}/{epochs} | loss={losses[-1]:.4f}")
+            progress.progress(
+                min(1.0, ep / epochs),
+                text=f"Training VAE... epoch {ep}/{epochs} | loss={losses[-1]:.4f}",
+            )
             # lightweight loss plot
             try:
                 loss_fig = px.line(y=losses, labels={"x": "epoch", "y": "loss"})
@@ -594,7 +604,16 @@ def _train_vae_on_masked_data(X_np: np.ndarray, epochs: int = 300, lr: float = 1
     return model, X_recon
 
 
-def _impute_scaled_block(merged_scaled: pd.DataFrame, merged_df_original: pd.DataFrame, feature_cols: list[str], epochs: int, lr: float, beta: float, hidden: int, latent: int):
+def _impute_scaled_block(
+    merged_scaled: pd.DataFrame,
+    merged_df_original: pd.DataFrame,
+    feature_cols: list[str],
+    epochs: int,
+    lr: float,
+    beta: float,
+    hidden: int,
+    latent: int,
+):
     """
     Run VAE on scaled feature block and return an imputed copy of merged_df (in original scale).
     """
@@ -629,6 +648,169 @@ def _impute_scaled_block(merged_scaled: pd.DataFrame, merged_df_original: pd.Dat
     return imputed_df
 
 
+# =============== GAN Implementation for Tabular Data ===============
+
+
+class SimpleGenerator(nn.Module):
+    """Simple feedforward generator for tabular data."""
+    
+    def __init__(self, latent_dim: int, output_dim: int, hidden_dim: int = 128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim * 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, output_dim),
+            nn.Tanh()  # Output in [-1, 1]
+        )
+    
+    def forward(self, z):
+        return self.net(z)
+
+
+class SimpleDiscriminator(nn.Module):
+    """Simple feedforward discriminator for tabular data."""
+    
+    def __init__(self, input_dim: int, hidden_dim: int = 128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            nn.Linear(hidden_dim // 2, 1),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        return self.net(x)
+
+
+def _train_gan_and_generate(
+    X_train: np.ndarray,
+    latent_dim: int = 64,
+    hidden_dim: int = 128,
+    epochs: int = 500,
+    lr: float = 1e-3,
+    n_samples: int = 10,
+    device: str | None = None,
+) -> np.ndarray:
+    """
+    Train a simple GAN on tabular data and generate synthetic samples.
+    
+    Args:
+        X_train: Training data, shape (n_samples, n_features), normalized to [-1, 1]
+        latent_dim: Dimension of latent noise vector
+        hidden_dim: Hidden layer dimension
+        epochs: Number of training epochs
+        lr: Learning rate
+        n_samples: Number of synthetic samples to generate
+        device: Device to use ('cuda' or 'cpu')
+    
+    Returns:
+        Generated samples as numpy array, shape (n_samples, n_features)
+    """
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch not available. Please install torch.")
+    
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    n_features = X_train.shape[0]
+    input_dim = X_train.shape[1]
+    
+    # Initialize models
+    generator = SimpleGenerator(latent_dim, input_dim, hidden_dim).to(device)
+    discriminator = SimpleDiscriminator(input_dim, hidden_dim).to(device)
+    
+    # Optimizers
+    opt_g = optim.Adam(generator.parameters(), lr=lr, betas=(0.5, 0.999))
+    opt_d = optim.Adam(discriminator.parameters(), lr=lr, betas=(0.5, 0.999))
+    
+    # Loss function
+    criterion = nn.BCELoss()
+    
+    # Convert to tensor
+    X_tensor = torch.tensor(X_train, dtype=torch.float32).to(device)
+    
+    # Training progress
+    progress = st.progress(0, text="Training GAN...")
+    loss_chart = st.empty()
+    g_losses, d_losses = [], []
+    
+    for epoch in range(1, epochs + 1):
+        # Train Discriminator
+        opt_d.zero_grad()
+        
+        # Real samples
+        real_labels = torch.ones(n_features, 1).to(device)
+        real_output = discriminator(X_tensor)
+        d_loss_real = criterion(real_output, real_labels)
+        
+        # Fake samples
+        noise = torch.randn(n_features, latent_dim).to(device)
+        fake_samples = generator(noise)
+        fake_labels = torch.zeros(n_features, 1).to(device)
+        fake_output = discriminator(fake_samples.detach())
+        d_loss_fake = criterion(fake_output, fake_labels)
+        
+        # Total discriminator loss
+        d_loss = d_loss_real + d_loss_fake
+        d_loss.backward()
+        opt_d.step()
+        
+        # Train Generator
+        opt_g.zero_grad()
+        noise = torch.randn(n_features, latent_dim).to(device)
+        fake_samples = generator(noise)
+        fake_output = discriminator(fake_samples)
+        g_loss = criterion(fake_output, real_labels)  # Generator wants discriminator to think fake is real
+        g_loss.backward()
+        opt_g.step()
+        
+        # Record losses
+        g_losses.append(g_loss.item())
+        d_losses.append(d_loss.item())
+        
+        # Update progress
+        if epoch % max(1, epochs // 100) == 0 or epoch == epochs:
+            progress.progress(
+                min(1.0, epoch / epochs),
+                text=f"Training GAN... epoch {epoch}/{epochs} | G loss: {g_losses[-1]:.4f}, D loss: {d_losses[-1]:.4f}",
+            )
+            
+            # Update loss chart
+            try:
+                loss_fig = go.Figure()
+                loss_fig.add_trace(go.Scatter(y=g_losses, name='Generator Loss', mode='lines'))
+                loss_fig.add_trace(go.Scatter(y=d_losses, name='Discriminator Loss', mode='lines'))
+                loss_fig.update_layout(
+                    height=200,
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    xaxis_title='Epoch',
+                    yaxis_title='Loss',
+                )
+                loss_chart.plotly_chart(loss_fig, use_container_width=True)
+            except Exception:
+                pass
+    
+    # Generate samples
+    generator.eval()
+    with torch.no_grad():
+        noise = torch.randn(n_samples, latent_dim).to(device)
+        generated = generator(noise)
+    
+    progress.empty()
+    loss_chart.empty()
+    
+    return generated.cpu().numpy()
+
+
 def plot_heatmap(merged_scaled, all_phys, all_genes, all_proteins):
     """
     Create an interactive heatmap using Plotly to display which samples have which data types.
@@ -660,6 +842,7 @@ def plot_heatmap(merged_scaled, all_phys, all_genes, all_proteins):
 
 
 # =============== Imputation helpers (rr9_imputation-inspired) ===============
+
 
 class RandomSampleImputerCompat:
     """
@@ -704,6 +887,42 @@ def _load_rr9_reference_csv(path: str) -> Optional[pd.DataFrame]:
     except Exception:
         pass
     return None
+
+
+def _save_local_cache(
+    path: str, df: pd.DataFrame, all_phys: list, all_genes: list, all_proteins: list
+) -> Tuple[str, str]:
+    """Save dataframe to CSV and store metadata next to it using joblib.
+
+    Returns (csv_path, meta_path).
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df.to_csv(path, index=False)
+    meta = {"all_phys": all_phys, "all_genes": all_genes, "all_proteins": all_proteins}
+    meta_path = path + '.meta.joblib'
+    joblib.dump(meta, meta_path)
+    return path, meta_path
+
+
+def _load_local_cache(path: str) -> Tuple[Optional[pd.DataFrame], dict]:
+    """Load a locally cached CSV and its metadata (if present).
+
+    Returns (df or None, meta dict possibly empty).
+    """
+    if not os.path.exists(path):
+        return None, {}
+    try:
+        df = pd.read_csv(path)
+    except Exception:
+        return None, {}
+    meta = {}
+    meta_path = path + '.meta.joblib'
+    if os.path.exists(meta_path):
+        try:
+            meta = joblib.load(meta_path)
+        except Exception:
+            meta = {}
+    return df, meta
 
 
 def _select_imputation_dataframe(source: str) -> Tuple[pd.DataFrame, str]:
@@ -767,7 +986,9 @@ def _build_mice_bagger_pipeline(
     Otherwise, returns a Pipeline that imputes only numeric features (excluding id columns).
     Returns (pipeline, expects_pre_split_features_only)
     """
-    bagger = BaggingRegressor(random_state=random_state, n_estimators=bag_n_estimators, n_jobs=n_jobs, warm_start=True)
+    bagger = BaggingRegressor(
+        random_state=random_state, n_estimators=bag_n_estimators, n_jobs=n_jobs, warm_start=True
+    )
     itera = IterativeImputer(
         random_state=random_state,
         initial_strategy='median',
@@ -781,10 +1002,16 @@ def _build_mice_bagger_pipeline(
 
     if include_group:
         # This pipeline expects input X that includes the 'Group' column
-        prep = ColumnTransformer([
-            ('features', StandardScaler(with_mean=True, with_std=True), lambda df: [c for c in df.columns if c not in ['Source Name', 'Group']]),
-            ('group', OneHotEncoder(sparse_output=False, handle_unknown='ignore'), ['Group'])
-        ])
+        prep = ColumnTransformer(
+            [
+                (
+                    'features',
+                    StandardScaler(with_mean=True, with_std=True),
+                    lambda df: [c for c in df.columns if c not in ['Source Name', 'Group']],
+                ),
+                ('group', OneHotEncoder(sparse_output=False, handle_unknown='ignore'), ['Group']),
+            ]
+        )
         pipe = Pipeline([('prep', prep), ('imputer', itera)])
         return pipe, False
     else:
@@ -908,6 +1135,14 @@ def _run_impute_pipeline(
 def main():
     set_page_default()
 
+    # Dashboard title
+    st.title("Retina Digital Twin for Space Biology based on RR9 Dataset")
+
+    # Default local cache path (used unless user changes it in the UI)
+    default_cache_path = os.path.join(
+        os.path.dirname(__file__), 'rr9_imputation', 'session_cached.csv'
+    )
+
     tab1, tab2, tab3, tab4 = st.tabs(
         [
             'Initial Data Loading',
@@ -919,29 +1154,148 @@ def main():
 
     tab1.subheader('Data Loading NOW')
     tab2.subheader('Imputation')
-    tab3.subheader('Data Generation GAN')
+    tab3.subheader('Data Generation with GAN')
     tab4.subheader('Data Generation VAE')
 
-    # Sidebar for data loading
+    # Initial Data Loading tab
     with tab1:
+        # Helper to apply a loaded dataframe and metadata into session state
+        def _apply_loaded(df: pd.DataFrame, meta: dict):
+            # If metadata present, use; otherwise fallback to heuristics
+            all_phys = list(meta.get('all_phys') or [])
+            all_genes = list(meta.get('all_genes') or [])
+            all_proteins = list(meta.get('all_proteins') or [])
 
-        merged_df, all_phys, all_genes, all_proteins = acquire_data()
-        merged_scaled, numeric_values = scale_data(merged_df)
+            # Basic fallback: treat non-id columns as features
+            cols = df.columns.tolist()
+            id_cols = [c for c in ['Source Name', 'Group'] if c in cols]
+            features = [c for c in cols if c not in id_cols]
+            if not all_genes and len(features) >= 1:
+                all_genes = [features[0]]
+            if not all_proteins and len(features) >= 2:
+                all_proteins = [features[1]]
+            if not all_phys:
+                # anything not identified as gene/protein is physiological
+                phys = [c for c in features if c not in all_genes + all_proteins]
+                all_phys = phys
 
-        print(numeric_values)
+            # Ensure 'Group' exists for downstream functions
+            if 'Group' not in df.columns:
+                df['Group'] = 'unknown'
+            # Ensure 'Source Name' exists
+            if 'Source Name' not in df.columns:
+                df.insert(0, 'Source Name', range(1, len(df) + 1))
 
-        plot_heatmap(merged_scaled, all_phys, all_genes, all_proteins)
+            merged_scaled, numeric_values = scale_data(df)
 
-        # Persist to session state for use in other tabs
-        st.session_state['merged_df'] = merged_df
-        st.session_state['merged_scaled'] = merged_scaled
-        st.session_state['all_phys'] = all_phys
-        st.session_state['all_genes'] = all_genes
-        st.session_state['all_proteins'] = all_proteins
+            # Persist
+            st.session_state['merged_df'] = df
+            st.session_state['merged_scaled'] = merged_scaled
+            st.session_state['all_phys'] = all_phys
+            st.session_state['all_genes'] = all_genes
+            st.session_state['all_proteins'] = all_proteins
+
+        # Data source selection (default to Local)
+        st.markdown('### Load data')
+        src_choice = st.radio('Data source', ['Local', 'Web'], horizontal=True, index=0)
+
+        if src_choice == 'Local':
+            local_cache_path = st.text_input('Local CSV path', value=default_cache_path)
+            # Auto-load local on first visit if available and not already loaded
+            if 'merged_df' not in st.session_state and os.path.exists(local_cache_path):
+                df_local, meta = _load_local_cache(local_cache_path)
+                if df_local is not None:
+                    _apply_loaded(df_local, meta)
+                    st.success(f'Loaded local data from {local_cache_path}')
+
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button('Load from path', type='primary'):
+                    df_local, meta = _load_local_cache(local_cache_path)
+                    if df_local is not None:
+                        _apply_loaded(df_local, meta)
+                        st.success(f'Loaded local data from {local_cache_path}')
+                    else:
+                        st.warning(f'No readable cache at {local_cache_path}')
+            with c2:
+                uploaded = st.file_uploader('...or upload a cached merged CSV', type=['csv'])
+                if uploaded is not None:
+                    try:
+                        df_uploaded = pd.read_csv(uploaded)
+                        _apply_loaded(df_uploaded, {})
+                        st.success('Uploaded and loaded CSV from local file')
+                    except Exception as e:
+                        st.error(f'Failed to parse uploaded CSV: {e}')
+
+        else:
+            st.info('Load directly from OSDR endpoints (may take time).')
+            if st.button('Download from web (OSDR)', type='primary'):
+                merged_df, all_phys, all_genes, all_proteins = acquire_data()
+                merged_scaled, _ = scale_data(merged_df)
+                st.session_state['merged_df'] = merged_df
+                st.session_state['merged_scaled'] = merged_scaled
+                st.session_state['all_phys'] = all_phys
+                st.session_state['all_genes'] = all_genes
+                st.session_state['all_proteins'] = all_proteins
+                st.success('Data loaded from web (OSDR).')
+
+        # Now we have data in session_state; display heatmap if possible
+        merged_scaled = st.session_state.get('merged_scaled')
+        all_phys = st.session_state.get('all_phys', [])
+        all_genes = st.session_state.get('all_genes', [])
+        all_proteins = st.session_state.get('all_proteins', [])
+
+        # Safe heatmap display: require at least one gene and one protein fallback
+        if merged_scaled is not None and len(all_genes) >= 1 and len(all_proteins) >= 1:
+            try:
+                plot_heatmap(merged_scaled, all_phys, all_genes, all_proteins)
+            except Exception:
+                st.warning('Unable to render heatmap with the available metadata.')
+        else:
+            st.info('Heatmap unavailable: missing gene/protein metadata in cached upload.')
+
+        # Provide a control to save current data locally for faster startup next time
+        save_col1, save_col2 = st.columns([3, 1])
+        with save_col1:
+            # Use the last entered local path if available; otherwise default
+            current_local_path = st.session_state.get('last_local_path', None)
+            # Try to infer from local input variable in this scope
+            try:
+                current_local_path = locals().get('local_cache_path', current_local_path)
+            except Exception:
+                pass
+            if current_local_path is None:
+                current_local_path = default_cache_path
+            save_path = st.text_input(
+                'Save current merged CSV to (local path)', value=current_local_path
+            )
+            # Remember for next time
+            st.session_state['last_local_path'] = save_path
+        with save_col2:
+            if st.button('Save local copy'):
+                try:
+                    df_to_save = st.session_state['merged_df']
+                    meta = {
+                        'all_phys': st.session_state.get('all_phys', []),
+                        'all_genes': st.session_state.get('all_genes', []),
+                        'all_proteins': st.session_state.get('all_proteins', []),
+                    }
+                    csvp, metap = _save_local_cache(
+                        save_path,
+                        df_to_save,
+                        meta['all_phys'],
+                        meta['all_genes'],
+                        meta['all_proteins'],
+                    )
+                    st.success(f'Saved local cache to {csvp} (meta: {metap})')
+                except Exception as e:
+                    st.error(f'Failed to save cache: {e}')
 
     # Imputation Tab (rr9_imputation-inspired pipelines)
     with tab2:
-        st.markdown("Manage imputation using KNN, Random-Sample, or MICE+Bagging. Long runs can be reused from cached CSVs.")
+        st.markdown(
+            "Manage imputation using KNN, Random-Sample, or MICE+Bagging. Long runs can be reused from cached CSVs."
+        )
 
         # Dataset selection
         ds_col1, ds_col2 = st.columns([2, 1])
@@ -957,11 +1311,16 @@ def main():
                 format_func=lambda x: x[0],
             )[1]
         with ds_col2:
-            reuse_cached = st.checkbox('Reuse cached CSV if exists', value=True,
-                                       help='If a matching output CSV exists, load it instead of recomputing.')
+            reuse_cached = st.checkbox(
+                'Reuse cached CSV if exists',
+                value=True,
+                help='If a matching output CSV exists, load it instead of recomputing.',
+            )
 
         # Method selection and params
-        method = st.selectbox('Imputation method', options=['KNN', 'Random Sample (RSI)', 'MICE + Bagging'])
+        method = st.selectbox(
+            'Imputation method', options=['KNN', 'Random Sample (RSI)', 'MICE + Bagging']
+        )
 
         params = {}
         save_prefix_default = ''
@@ -994,27 +1353,42 @@ def main():
             with c1:
                 max_iter = st.slider('Max Iterations', min_value=1, max_value=50, value=10)
             with c2:
-                bag_estimators = st.slider('Bagging n_estimators', min_value=5, max_value=200, value=10, step=5)
+                bag_estimators = st.slider(
+                    'Bagging n_estimators', min_value=5, max_value=200, value=10, step=5
+                )
             with c3:
-                tol = st.number_input('Tolerance (tol)', min_value=0.0, value=0.01, step=0.01, format='%f')
-            include_group = st.checkbox('Include Group (one-hot) in imputation', value=True,
-                                        help='Recommended for full dataset to borrow strength across groups.')
-            params.update({
-                'include_group': include_group,
-                'bag_n_estimators': bag_estimators,
-                'max_iter': max_iter,
-                'tol': tol,
-            })
+                tol = st.number_input(
+                    'Tolerance (tol)', min_value=0.0, value=0.01, step=0.01, format='%f'
+                )
+            include_group = st.checkbox(
+                'Include Group (one-hot) in imputation',
+                value=True,
+                help='Recommended for full dataset to borrow strength across groups.',
+            )
+            params.update(
+                {
+                    'include_group': include_group,
+                    'bag_n_estimators': bag_estimators,
+                    'max_iter': max_iter,
+                    'tol': tol,
+                }
+            )
             save_prefix_default = {
                 'session': 'session_imputed_mice_bagger',
-                'full': 'full_imputed_mice_bagger_with_group' if include_group else 'full_imputed_mice_bagger',
+                'full': (
+                    'full_imputed_mice_bagger_with_group'
+                    if include_group
+                    else 'full_imputed_mice_bagger'
+                ),
                 'flight': 'flight_imputed_mice_bagger',
                 'non_flight': 'non_flight_imputed_mice_bagger',
             }.get(ds_source, 'imputed_mice_bagger')
 
         # Output naming
-        save_prefix = st.text_input('Output prefix (CSV and pipeline will be saved in Working_Code/rr9_imputation)',
-                                    value=save_prefix_default)
+        save_prefix = st.text_input(
+            'Output prefix (CSV and pipeline will be saved in Working_Code/rr9_imputation)',
+            value=save_prefix_default,
+        )
 
         # Run
         if st.button('Run Imputation', type='primary'):
@@ -1024,7 +1398,11 @@ def main():
 
                 st.info(f'Input shape: {df_in.shape}. Columns: {len(df_in.columns)}.')
 
-                method_key = {'KNN': 'knn', 'Random Sample (RSI)': 'rsi', 'MICE + Bagging': 'mice_bagger'}[method]
+                method_key = {
+                    'KNN': 'knn',
+                    'Random Sample (RSI)': 'rsi',
+                    'MICE + Bagging': 'mice_bagger',
+                }[method]
 
                 # Progress placeholder
                 progress = st.progress(0.0, text='Running imputation...')
@@ -1044,16 +1422,31 @@ def main():
                 # Cache in session and offer download
                 st.session_state['imputed_df'] = imputed_df
                 csv_bytes = imputed_df.to_csv(index=False).encode('utf-8')
-                st.download_button('Download imputed CSV', data=csv_bytes, file_name=f'{save_prefix}.csv', mime='text/csv')
+                st.download_button(
+                    'Download imputed CSV',
+                    data=csv_bytes,
+                    file_name=f'{save_prefix}.csv',
+                    mime='text/csv',
+                )
 
                 # Correlation heatmap (top-left NxN)
                 try:
-                    N = st.slider('Correlation preview size (NxN)', min_value=20, max_value=200, value=100, step=10)
+                    N = st.slider(
+                        'Correlation preview size (NxN)',
+                        min_value=20,
+                        max_value=200,
+                        value=100,
+                        step=10,
+                    )
                     # Exclude id cols
                     idc = [c for c in ['Source Name', 'Group'] if c in imputed_df.columns]
                     corr = imputed_df.drop(columns=idc).corr(numeric_only=True)
                     corr = corr.iloc[:N, :N]
-                    fig = px.imshow(corr, title=f'Correlation Matrix (Top {N}x{N})', color_continuous_scale='RdBu')
+                    fig = px.imshow(
+                        corr,
+                        title=f'Correlation Matrix (Top {N}x{N})',
+                        color_continuous_scale='RdBu',
+                    )
                     fig.update_layout(height=500)
                     st.plotly_chart(fig, use_container_width=True)
                 except Exception as e:
@@ -1067,6 +1460,137 @@ def main():
 
             except Exception as e:
                 st.exception(e)
+
+    # GAN Tab: Generate synthetic data using GAN
+    with tab3:
+        if 'merged_df' not in st.session_state:
+            st.info('Load data in the "Initial Data Loading" tab first.')
+        else:
+            merged_df = st.session_state['merged_df']
+            all_genes = st.session_state.get('all_genes', [])
+            all_proteins = st.session_state.get('all_proteins', [])
+            all_phys = st.session_state.get('all_phys', [])
+
+            st.markdown("Generate synthetic samples using a Generative Adversarial Network (GAN).")
+            st.markdown("The GAN learns the distribution of real data and generates new synthetic samples.")
+
+            # Feature subset selection
+            feature_set = st.selectbox(
+                'Feature subset for generation',
+                options=['All numeric', 'RNAseq genes', 'Proteins', 'Physiological'],
+                index=0,
+                help='Select which features to use for training the GAN.',
+            )
+            
+            if feature_set == 'RNAseq genes':
+                feature_cols = all_genes
+            elif feature_set == 'Proteins':
+                feature_cols = all_proteins
+            elif feature_set == 'Physiological':
+                feature_cols = all_phys
+            else:
+                # All numeric columns excluding identifier and group
+                feature_cols = [c for c in merged_df.columns if c not in ['Source Name', 'Group']]
+
+            st.caption(f"Selected features: {len(feature_cols)} columns")
+
+            # GAN hyperparameters
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                latent_dim = st.slider('Latent dimension', min_value=16, max_value=256, value=64, step=16)
+            with c2:
+                hidden_dim = st.slider('Hidden dimension', min_value=64, max_value=512, value=128, step=64)
+            with c3:
+                epochs = st.slider('Training epochs', min_value=100, max_value=2000, value=500, step=100)
+
+            c4, c5 = st.columns(2)
+            with c4:
+                lr = st.selectbox('Learning rate', options=[1e-2, 5e-3, 1e-3, 5e-4, 1e-4], index=2)
+            with c5:
+                n_samples = st.number_input('Number of samples to generate', min_value=1, max_value=1000, value=10, step=1)
+
+            # Check if PyTorch is available
+            disabled_reason = None
+            if not TORCH_AVAILABLE:
+                disabled_reason = 'PyTorch is not installed. Please install torch to use this tab.'
+
+            if disabled_reason:
+                st.error(disabled_reason)
+            else:
+                if st.button('Train GAN and Generate Samples', type='primary'):
+                    with st.spinner('Training GAN...'):
+                        try:
+                            # Prepare data
+                            X_df = merged_df[feature_cols].copy()
+                            
+                            # Remove rows with all NaN
+                            X_df = X_df.dropna(how='all')
+                            
+                            # For simplicity, fill remaining NaNs with column mean
+                            X_df = X_df.fillna(X_df.mean())
+                            
+                            # Convert to numpy and normalize to [-1, 1]
+                            X_np = X_df.to_numpy(dtype=np.float32)
+                            
+                            # Min-max scale to [-1, 1]
+                            X_min = X_np.min(axis=0, keepdims=True)
+                            X_max = X_np.max(axis=0, keepdims=True)
+                            X_range = X_max - X_min
+                            X_range[X_range == 0] = 1.0  # Avoid division by zero
+                            X_scaled = 2 * (X_np - X_min) / X_range - 1
+                            
+                            st.info(f'Training data shape: {X_scaled.shape}')
+                            
+                            # Train GAN
+                            generated_samples = _train_gan_and_generate(
+                                X_scaled,
+                                latent_dim=int(latent_dim),
+                                hidden_dim=int(hidden_dim),
+                                epochs=int(epochs),
+                                lr=float(lr),
+                                n_samples=int(n_samples),
+                            )
+                            
+                            # Inverse transform generated samples back to original scale
+                            generated_unscaled = (generated_samples + 1) / 2 * X_range + X_min
+                            
+                            # Create dataframe with generated samples
+                            generated_df = pd.DataFrame(generated_unscaled, columns=feature_cols)
+                            generated_df.insert(0, 'Source Name', [f'GAN_synthetic_{i+1}' for i in range(n_samples)])
+                            
+                            st.success(f'Generated {n_samples} synthetic samples!')
+                            st.dataframe(generated_df.head(20))
+                            
+                            # Store in session
+                            st.session_state['generated_df_gan'] = generated_df
+                            
+                            # Download button
+                            csv = generated_df.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label='Download generated samples (CSV)',
+                                data=csv,
+                                file_name='gan_generated_samples.csv',
+                                mime='text/csv',
+                            )
+                            
+                            # Comparison visualization: plot distribution comparison
+                            st.markdown('### Distribution Comparison (first 5 features)')
+                            fig, axes = plt.subplots(1, min(5, len(feature_cols)), figsize=(15, 3))
+                            if min(5, len(feature_cols)) == 1:
+                                axes = [axes]
+                            
+                            for i in range(min(5, len(feature_cols))):
+                                col = feature_cols[i]
+                                axes[i].hist(X_df[col].dropna(), alpha=0.5, label='Real', bins=20)
+                                axes[i].hist(generated_df[col], alpha=0.5, label='Generated', bins=20)
+                                axes[i].set_title(col[:30])
+                                axes[i].legend()
+                            
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            
+                        except Exception as e:
+                            st.exception(e)
 
     # VAE Tab: Impute missing values in RNAseq genes using a VAE
     with tab4:
@@ -1099,7 +1623,7 @@ def main():
                 'Feature subset to impute',
                 options=['RNAseq genes', 'Proteins', 'Physiological', 'All numeric'],
                 index=0,
-                help='Select which columns to pass to the VAE for imputation. Data is scaled to [0,1] before training.'
+                help='Select which columns to pass to the VAE for imputation. Data is scaled to [0,1] before training.',
             )
             if feature_set == 'RNAseq genes':
                 feature_cols = all_genes
@@ -1109,10 +1633,7 @@ def main():
                 feature_cols = all_phys
             else:
                 # All numeric columns excluding identifier and group
-                feature_cols = [
-                    c for c in merged_scaled.columns
-                    if c not in ['Group']
-                ]
+                feature_cols = [c for c in merged_scaled.columns if c not in ['Group']]
 
             st.caption(f"Feature block: {feature_set} ({len(feature_cols)} features)")
 
@@ -1151,7 +1672,7 @@ def main():
                                 label='Download imputed dataframe (CSV)',
                                 data=csv,
                                 file_name='merged_df_imputed_vae.csv',
-                                mime='text/csv'
+                                mime='text/csv',
                             )
                         except Exception as e:
                             st.exception(e)
