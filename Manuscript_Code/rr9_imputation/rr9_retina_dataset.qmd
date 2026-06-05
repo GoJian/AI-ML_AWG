@@ -223,17 +223,78 @@ col_to_category = {col: cat for cat, cols in cat_cols.items() for col in cols}
 category_series = pd.Series(col_to_category)
 
 # Calculate the fraction of non-missing values for each category per row
-category_presence = rr9_all_df.notnull().groupby(category_series, axis=1).any()
+# Before (broken in pandas >= 3.0)
+# category_presence = rr9_all_df.notnull().groupby(category_series, axis=1).any()
+
+# After
+category_presence = rr9_all_df.notnull().T.groupby(category_series).any().T
 
 
-plt.figure(figsize=(15,5))
-ax = sns.heatmap(category_presence.T,cmap='Blues', cbar=True, linewidths=1, linecolor="black")
+fig, ax = plt.subplots(figsize=(18, 8), dpi=600)
+sns.heatmap(
+    category_presence.T,
+    cmap='Blues',
+    cbar=True,
+    linewidths=0.5,
+    linecolor="black",
+    ax=ax,
+    cbar_kws={"shrink": 0.6, "label": "Data Present"}
+)
 
-ax.set_xticks(range(len(rr9_all_df['Source Name'])))
-ax.set_xticklabels(rr9_all_df['Source Name'], rotation=90, fontsize=6, fontweight ="bold")
-ax.set_xlabel("Sample Names")
-ax.set_ylabel("Categories")
-plt.title("Heatmap of Data Availability per Category")
+ax.set_xticks([])
+ax.set_xticklabels([])
+ax.set_yticklabels([t.get_text().upper() for t in ax.get_yticklabels()], fontsize=12, fontweight="bold", rotation=0)
+ax.set_xlabel("")
+ax.set_ylabel("Categories", fontsize=14, labelpad=10)
+ax.set_title("Heatmap of Data Availability per Category", fontsize=16, pad=12)
+
+# Draw vertical separator lines and group span annotations
+sample_names = rr9_all_df['Source Name'].tolist()
+def get_group(name):
+    for prefix in ['CC1_', 'CC2_', 'GC', 'F', "Viv"]:
+        if name.startswith(prefix):
+            return prefix.rstrip('_')
+    return name.split('_')[0]
+
+group_labels = [get_group(s) for s in sample_names]
+
+# Find contiguous group spans
+from itertools import groupby as _groupby
+spans = []
+idx = 0
+for grp, members in _groupby(group_labels):
+    n = sum(1 for _ in members)
+    spans.append((grp, idx, idx + n))
+    idx += n
+
+# Draw separator lines at group boundaries
+boundaries = [s[2] for s in spans[:-1]]
+for b in boundaries:
+    ax.axvline(x=b, color='red', linewidth=2, linestyle='--')
+
+# Add group span bracket annotations directly below the heatmap
+# get_xaxis_transform(): x=data coords, y=axes fraction (0=bottom, 1=top)
+y_bracket = -0.04   # 4% below the bottom edge
+y_tick    = -0.07   # bracket end ticks
+y_label   = -0.11   # group label text
+
+for grp, start, end in spans:
+    mid = (start + end) / 2
+    ax.annotate('', xy=(end, y_bracket), xytext=(start, y_bracket),
+                xycoords=ax.get_xaxis_transform(),
+                textcoords=ax.get_xaxis_transform(),
+                arrowprops=dict(arrowstyle='-', color='black', lw=1.5),
+                annotation_clip=False)
+    ax.plot([start, start], [y_tick, y_bracket], color='black', lw=1.5,
+            transform=ax.get_xaxis_transform(), clip_on=False)
+    ax.plot([end, end], [y_tick, y_bracket], color='black', lw=1.5,
+            transform=ax.get_xaxis_transform(), clip_on=False)
+    ax.text(mid, y_label, grp,
+            ha='center', va='top', fontsize=12, fontweight='bold',
+            transform=ax.get_xaxis_transform(), clip_on=False)
+
+plt.subplots_adjust(bottom=0.18)
+plt.savefig("category_presence_heatmap.png", dpi=600, bbox_inches="tight")
 plt.show()
 ```
 
@@ -243,7 +304,7 @@ plt.show()
 ```{python}
 # Nullity Correlation Matrix
 # This step ensures all categories appear, even if all values are False (not missing)
-category_missing = rr9_all_df.isnull().groupby(category_series, axis=1).any()
+category_missing = rr9_all_df.isnull().T.groupby(category_series).any().T
 
 # Add missing categories as all False if necessary
 for cat in cat_cols:
@@ -251,11 +312,37 @@ for cat in cat_cols:
         category_missing[cat] = False
 category_nullity_corr = category_missing.corr().fillna(0)  # Fill NaN with 0 for display
 category_nullity_corr = category_nullity_corr[cat_cols.keys()].loc[cat_cols.keys()]
-plt.figure(figsize=(8,6))
-sns.heatmap(category_nullity_corr, annot=True, cmap='coolwarm_r', center=0, vmin=-1, vmax=1)
-plt.title("Nullity Correlation Matrix by Data Category (All Categories Included)")
-plt.xlabel("Categories")
-plt.ylabel("Categories")
+category_nullity_corr_display = category_nullity_corr.copy()
+category_nullity_corr_display.index   = [s.upper() for s in category_nullity_corr_display.index]
+category_nullity_corr_display.columns = [s.upper() for s in category_nullity_corr_display.columns]
+
+fig, ax = plt.subplots(figsize=(9, 8), dpi=600)
+sns.heatmap(
+    category_nullity_corr_display,
+    annot=True,
+    fmt=".2f",
+    annot_kws={"size": 9, "weight": "bold"},
+    cmap='coolwarm_r',
+    center=0,
+    vmin=-1,
+    vmax=1,
+    linewidths=0.5,
+    linecolor="lightgrey",
+    ax=ax,
+    cbar_kws={"shrink": 0.8, "label": "Pearson Correlation"}
+)
+ax.set_title(
+    "Nullity Correlation Matrix by Data Category",
+    fontsize=14, fontweight="bold", pad=14
+)
+ax.set_xlabel("Categories", fontsize=12, labelpad=10)
+ax.set_ylabel("Categories", fontsize=12, labelpad=10)
+ax.set_xticklabels(ax.get_xticklabels(), fontsize=10, fontweight="bold", rotation=45, ha="right")
+ax.set_yticklabels(ax.get_yticklabels(), fontsize=10, fontweight="bold", rotation=0)
+ax.figure.axes[-1].yaxis.label.set_size(10)
+
+plt.tight_layout()
+plt.savefig("nullity_correlation_matrix.png", dpi=600, bbox_inches="tight")
 plt.show()
 ```
 
@@ -401,7 +488,9 @@ for cat, cols in cat_cols.items():
 # 2. Compute correlation and distance matrix among categories
 null_corr = category_null_matrix.corr()
 distance_matrix = 1 - null_corr.abs()
-np.fill_diagonal(distance_matrix.values, 0)
+_dm = distance_matrix.to_numpy(copy=True)
+np.fill_diagonal(_dm, 0)
+distance_matrix = pd.DataFrame(_dm, index=distance_matrix.index, columns=distance_matrix.columns)
 distance_matrix = distance_matrix.replace([np.inf, -np.inf], 1).fillna(1)
 
 condensed_distance = squareform(distance_matrix.values, checks=False)
@@ -409,17 +498,29 @@ condensed_distance = squareform(distance_matrix.values, checks=False)
 # 3. Cluster and plot vertical dendrogram
 linkage_matrix = linkage(condensed_distance, method='average')
 
-plt.figure(figsize=(6, 8))
+plt.figure(figsize=(7, 8), dpi=600)
+ax = plt.gca()
 dendrogram(
     linkage_matrix,
-    labels=list(cat_cols.keys()),
-    orientation='right',   # vertical dendrogram, labels on y-axis
-    leaf_rotation=0
+    labels=[s.upper() for s in cat_cols.keys()],
+    orientation='right',
+    leaf_rotation=0,
+    leaf_font_size=11,
+    above_threshold_color='#444444',
+    color_threshold=0.4 * max(linkage_matrix[:, 2])
 )
-plt.title('Vertical Dendrogram of Column Categories by Nullity Pattern')
-plt.xlabel('Distance')
-plt.ylabel('Category')
+ax.set_title(
+    'Hierarchical Clustering of Categories\nby Missingness Pattern',
+    fontsize=13, fontweight='bold', pad=12
+)
+ax.set_xlabel('Distance', fontsize=11, labelpad=8)
+ax.set_ylabel('Category', fontsize=11, labelpad=8)
+ax.tick_params(axis='x', labelsize=10)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
 plt.tight_layout()
+plt.savefig("nullity_dendrogram.png", dpi=600, bbox_inches="tight")
 plt.show()
 ```
 
@@ -431,67 +532,136 @@ plt.show()
 ```{python}
 #| echo: False
 #| label: PCA Function Definition
-# Prior to running PCA, all the tonometry data needs to be normalized.
-def perform_pca(df,ideal_pca_components=2, dataset_name=tonometry):
+import matplotlib.patches as mpatches
+import matplotlib.transforms as mtransforms
+
+def _confidence_ellipse(x, y, ax, n_std=2.0, **kwargs):
+    """Draw a covariance confidence ellipse for points (x, y) on ax."""
+    if len(x) < 3:
+        return
+    cov = np.cov(x, y)
+    pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+    rx = np.sqrt(1 + pearson)
+    ry = np.sqrt(1 - pearson)
+    ellipse = mpatches.Ellipse(
+        (0, 0), width=rx * 2, height=ry * 2,
+        facecolor=kwargs.pop('facecolor', 'none'),
+        **kwargs
+    )
+    scale_x = np.sqrt(cov[0, 0]) * n_std
+    scale_y = np.sqrt(cov[1, 1]) * n_std
+    transf = (
+        mtransforms.Affine2D()
+        .rotate_deg(45)
+        .scale(scale_x, scale_y)
+        .translate(np.mean(x), np.mean(y))
+    )
+    ellipse.set_transform(transf + ax.transData)
+    ax.add_patch(ellipse)
+
+
+def perform_pca(df, ideal_pca_components=2, dataset_name=tonometry, save_prefix=None):
     '''
-    The function takes input of the name of the dataset based on list defined above. If the name is not in the name of the dataset in dfs, then the function will error out.
-    The idea of this function is to do a PCA analysis the different modalities of the data within the rr9 dataset against different groups available.
+    Performs PCA on the specified dataset modality within df.
+    Returns (pca_df, fig) where fig is a publication-ready matplotlib Figure.
     '''
     cols_to_select = dataset_name.columns.tolist() + ['Source Name', 'Group']
-    dataset_cols = dataset_name.columns.tolist()
+    dataset_cols   = dataset_name.columns.tolist()
     subset_df = df[cols_to_select].dropna(how='any').reset_index(drop=True)
+
     std_scaler = StandardScaler()
-    scaled_df = std_scaler.fit_transform(subset_df[dataset_cols])
+    scaled_df  = std_scaler.fit_transform(subset_df[dataset_cols])
 
-    pca = PCA(random_state=2).fit(scaled_df)
-    n = pca.n_components_
-    grid = np.arange(1, n + 1)
-    evr = pca.explained_variance_ratio_
-   
-    fig, axs = plt.subplots(1, 2)
-    axs[0].bar(grid, evr)
-    axs[0].set(
-        xlabel="Component", title="% Explained Variance", ylim=(0.0, round(10*max(evr)+0.5)/10)
-    )
-    axs[0].title.set_weight('bold')
-    axs[0].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    # --- Scree / cumulative variance ---
+    pca_full = PCA(random_state=2).fit(scaled_df)
+    n        = pca_full.n_components_
+    grid     = np.arange(1, n + 1)
+    evr      = pca_full.explained_variance_ratio_
+    cv       = np.cumsum(evr)
+    ideal_pca_components = int(np.argmax(cv > 0.95) + 1)
+
+    fig_scree, axs = plt.subplots(1, 2, figsize=(10, 4), dpi=600)
+
+    # Scree bar
+    axs[0].bar(grid, evr * 100, color='steelblue', edgecolor='black', linewidth=0.6)
+    axs[0].set_xlabel("Principal Component", fontsize=11)
+    axs[0].set_ylabel("Explained Variance (%)", fontsize=11)
+    axs[0].set_title("Scree Plot", fontsize=13, fontweight='bold')
     axs[0].set_xticks(grid)
-    axs[0].set_xticklabels(grid)
+    axs[0].set_xticklabels(grid, fontsize=9)
+    axs[0].spines['top'].set_visible(False)
+    axs[0].spines['right'].set_visible(False)
 
-    # Cumulative Variance
-    cv = np.cumsum(evr)
-    ideal_pca_components = np.argmax(cv > 0.95) + 1
-    axs[1].plot(grid, cv, "o-")
-    axs[1].set(
-        xlabel="Component", title=f"% Cumulative Variance, setting n_components={ideal_pca_components}", ylim=(0.0, 1.01)
-    )
-    axs[1].title.set_weight('bold')
-    axs[1].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    # Cumulative variance
+    axs[1].plot(grid, cv * 100, 'o-', color='steelblue', linewidth=1.5, markersize=5)
+    axs[1].axhline(95, color='red', linestyle='--', linewidth=1, label='95% threshold')
+    axs[1].axvline(ideal_pca_components, color='grey', linestyle=':', linewidth=1,
+                   label=f'n={ideal_pca_components} components')
+    axs[1].set_xlabel("Principal Component", fontsize=11)
+    axs[1].set_ylabel("Cumulative Variance (%)", fontsize=11)
+    axs[1].set_title("Cumulative Explained Variance", fontsize=13, fontweight='bold')
     axs[1].set_xticks(grid)
-    axs[1].set_xticklabels(grid)
+    axs[1].set_xticklabels(grid, fontsize=9)
+    axs[1].set_ylim(0, 102)
+    axs[1].legend(fontsize=9, frameon=False)
+    axs[1].spines['top'].set_visible(False)
+    axs[1].spines['right'].set_visible(False)
 
-    # Cumulative variance value on the 2nd plot
-    axs[1].annotate(f'CV={cv[-1]:.3f}', (grid[-1], cv[-1]), textcoords="offset points", xytext=(-15,-10), ha='center')
+    fig_scree.tight_layout()
+    if save_prefix:
+        fig_scree.savefig(f"{save_prefix}_scree.png", dpi=600, bbox_inches='tight')
+    plt.show()
 
-    # Set up figure
-    fig.set(figwidth=10)
-    
+    # --- PCA scatter ---
     pca_final = PCA(n_components=ideal_pca_components, random_state=2)
+    coords    = pca_final.fit_transform(scaled_df)
+    evr_final = pca_final.explained_variance_ratio_
 
-    pca_df = pd.DataFrame(pca_final.fit_transform(scaled_df))
-    pca_df.columns = ["PCA_" + str(i) for i in range(1, ideal_pca_components+1)]
+    pca_df = pd.DataFrame(coords, columns=[f"PC{i}" for i in range(1, ideal_pca_components + 1)])
     pca_df = pd.concat([subset_df[['Source Name', 'Group']], pca_df], axis=1)
 
-    if ideal_pca_components>2:
-        scatter_plot = px.scatter_3d(pca_df, x='PCA_1', y='PCA_2', z='PCA_3', color='Group', title=f'PCA Projections Against Groups')
-    else:
-        scatter_plot = px.scatter(pca_df, x='PCA_1', y='PCA_2', color='Group', title=f'PCA Projections Against Groups')
-        scatter_plot.update_traces(marker=dict(size=12,
-                              line=dict(width=2,
-                                        color='DarkSlateGrey')),
-                  selector=dict(mode='markers'))
+    groups  = pca_df['Group'].unique()
+    palette = plt.get_cmap('tab10')
+    color_map = {g: palette(i) for i, g in enumerate(groups)}
 
-    return pca_df, scatter_plot    
+    if ideal_pca_components >= 3:
+        fig_scatter = plt.figure(figsize=(8, 7), dpi=600)
+        ax3 = fig_scatter.add_subplot(111, projection='3d')
+        for grp in groups:
+            sub = pca_df[pca_df['Group'] == grp]
+            ax3.scatter(sub['PC1'], sub['PC2'], sub['PC3'],
+                        color=color_map[grp], label=grp, s=60, edgecolors='k', linewidths=0.4)
+        ax3.set_xlabel(f"PC1 ({evr_final[0]*100:.1f}%)", fontsize=10, labelpad=8)
+        ax3.set_ylabel(f"PC2 ({evr_final[1]*100:.1f}%)", fontsize=10, labelpad=8)
+        ax3.set_zlabel(f"PC3 ({evr_final[2]*100:.1f}%)", fontsize=10, labelpad=8)
+        ax3.set_title("PCA — PC1 vs PC2 vs PC3", fontsize=13, fontweight='bold')
+        ax3.legend(title='Group', fontsize=9, title_fontsize=10, frameon=True)
+    else:
+        fig_scatter, ax = plt.subplots(figsize=(7, 6), dpi=600)
+        for grp in groups:
+            sub = pca_df[pca_df['Group'] == grp]
+            ax.scatter(sub['PC1'], sub['PC2'],
+                       color=color_map[grp], label=grp,
+                       s=60, edgecolors='k', linewidths=0.5, zorder=3)
+            _confidence_ellipse(sub['PC1'].values, sub['PC2'].values, ax,
+                                n_std=2.0, edgecolor=color_map[grp],
+                                linewidth=1.5, linestyle='--', alpha=0.7)
+        ax.axhline(0, color='grey', linewidth=0.6, linestyle='-', zorder=1)
+        ax.axvline(0, color='grey', linewidth=0.6, linestyle='-', zorder=1)
+        ax.set_xlabel(f"PC1 ({evr_final[0]*100:.1f}%)", fontsize=12, labelpad=8)
+        ax.set_ylabel(f"PC2 ({evr_final[1]*100:.1f}%)", fontsize=12, labelpad=8)
+        ax.set_title("PCA — PC1 vs PC2", fontsize=14, fontweight='bold', pad=10)
+        ax.legend(title='Group', fontsize=10, title_fontsize=11,
+                  frameon=True, framealpha=0.9, edgecolor='grey')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        fig_scatter.tight_layout()
+
+    if save_prefix:
+        fig_scatter.savefig(f"{save_prefix}_scatter.png", dpi=600, bbox_inches='tight')
+    plt.show()
+
+    return pca_df, fig_scatter
 ```
 
 ## PCA on Different Categories of Datasets
@@ -500,8 +670,7 @@ def perform_pca(df,ideal_pca_components=2, dataset_name=tonometry):
 ```{python}
 #| echo: False
 #| label: PCA on RNASeq
-rnaseq_pca_df, scatter_plt  = perform_pca(rr9_all_df,dataset_name=rnaseq)
-scatter_plt.show()
+rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=rnaseq, save_prefix="pca_rnaseq")
 ```
 
 #### PCA on RNASeq for Only Predictive Genes for Phenotype
@@ -542,8 +711,7 @@ set(genes_predictive_of_phenotypes).issubset(rnaseq.columns.to_list())
 filtered_rnaseq = rnaseq[genes_predictive_of_phenotypes]
 
 # Perform PCA on the filtered dataset
-phenotype_rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=filtered_rnaseq)
-scatter_plt.show()
+phenotype_rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=filtered_rnaseq, save_prefix="pca_rnaseq_predictive")
 ```
 
 #### PCA on Phenotype Related RNASeq Genes
@@ -562,7 +730,7 @@ print(len(found_genes), "genes found in the RNASeq dataset.")
 filtered_pheno_genes_rnaseq = rnaseq[found_genes]
 
 # Perform PCA on the filtered dataset
-pheno_genes_rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=filtered_pheno_genes_rnaseq)
+pheno_genes_rnaseq_pca_df, scatter_plt = perform_pca(rr9_all_df, dataset_name=filtered_pheno_genes_rnaseq, save_prefix="pca_rnaseq_pheno_genes")
 scatter_plt.show()
 ```
 
@@ -571,7 +739,7 @@ scatter_plt.show()
 ```{python}
 #| echo: False
 #| label: PCA on Proteomics
-protein_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=protein)
+protein_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=protein, save_prefix="pca_protein")
 scatter_plt
 ```
 
@@ -579,7 +747,7 @@ scatter_plt
 ```{python}
 #| echo: False
 #| label: PCA on TUNEL Assay
-tunel_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=tunel)
+tunel_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=tunel, save_prefix="pca_tunel")
 scatter_plt
 # protein, zo1, tunel, pecam, microct, pna, hne
 ```
@@ -588,7 +756,7 @@ scatter_plt
 ```{python}
 #| echo: False
 #| label: PCA on HNE Data
-hne_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=hne)
+hne_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=hne, save_prefix="pca_hne")
 
 scatter_plt.show()
 
@@ -599,7 +767,7 @@ scatter_plt.show()
 ```{python}
 #| echo: False
 #| label: PCA on Micro CT Data
-miroct_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=microct)
+miroct_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=microct, save_prefix="pca_microct")
 
 scatter_plt.show()
 
@@ -611,7 +779,7 @@ Zo-1, PECAM, PNA and HNE are all immunostaining microscopy. It would be useful t
 #| echo: False
 #| label: PCA by Combining all Immunostaining microscopy data
 immuno_mic = pd.concat([zo1, pecam, pna, hne], axis=1, join='outer')
-immuno_mic_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=immuno_mic)
+immuno_mic_pca_df, scatter_plt = perform_pca(rr9_all_df,dataset_name=immuno_mic, save_prefix="pca_immuno_mic")
 
 scatter_plt.show()
 ```
@@ -627,55 +795,66 @@ To be able to anchor the imputation of RNASeq data onto biological characteristi
 ```{python}
 #| label: Function definition for Analyzing Correlation
 #| echo: false
-def analyze_correlation(dataset_name, gene_list, rr9_all_df):
+def analyze_correlation(dataset_name, gene_list, rr9_all_df, save_prefix=None):
     """
     Analyze the correlation between a given dataset and a list of genes.
 
     Parameters:
     - dataset_name: DataFrame, the dataset to analyze (e.g., TUNEL, HNE, etc.)
     - gene_list: list, the list of genes to analyze
-    - rr9_all_df: DataFrame, the merged RR9 dataset containing all data
+    - rr9_all_df: DataFrame, the merged RR9 dataset
+    - save_prefix: str, optional prefix for saving PNG files per group
 
     Returns:
-    - None, displays heatmaps for correlation matrices
+    - None, displays publication-ready heatmaps for each group
     """
-    # Select relevant columns
-    rna_cols_to_select = gene_list + ['Source Name', 'Group']
+    rna_cols_to_select     = gene_list + ['Source Name', 'Group']
     dataset_cols_to_select = dataset_name.columns.tolist() + ['Source Name', 'Group']
-    
-    # Filter and drop missing values
-    rnaseq_filtered = rr9_all_df[rna_cols_to_select].dropna(how='any').reset_index(drop=True)
+
+    rnaseq_filtered  = rr9_all_df[rna_cols_to_select].dropna(how='any').reset_index(drop=True)
     dataset_filtered = rr9_all_df[dataset_cols_to_select].dropna(how='any').reset_index(drop=True)
-    
-    # Merge the two datasets
+
     combined_df = pd.merge(dataset_filtered, rnaseq_filtered, on=['Source Name', 'Group'], how='inner')
     groups = combined_df['Group'].unique()
-    
-    # Iterate over each group and compute the correlation matrix
+
     for group in groups:
-        # Filter data for the current group
-        group_indices = combined_df[combined_df['Group'] == group].index
-        dataset_group = dataset_filtered.loc[group_indices]
-        rnaseq_group = rnaseq_filtered.loc[group_indices]
-        
-        # Concatenate the two dataframes along the columns
+        group_indices    = combined_df[combined_df['Group'] == group].index
+        dataset_group    = dataset_filtered.loc[group_indices]
+        rnaseq_group     = rnaseq_filtered.loc[group_indices]
         combined_group_df = pd.concat([dataset_group, rnaseq_group], axis=1)
-        
-        # Compute the correlation matrix
-        correlation_matrix = combined_group_df.corr(numeric_only=True)
-        
-        # Plot the heatmap
+
+        corr = combined_group_df.corr(numeric_only=True)
+
+        n = len(corr)
+        fig, ax = plt.subplots(figsize=(8, 6), dpi=600)
+
         sns.heatmap(
-            correlation_matrix,
+            corr,
             cmap='coolwarm',
             annot=False,
-            cbar_kws={'label': 'Correlation Coefficient'}
+            vmin=-1, vmax=1,
+            linewidths=0.3,
+            linecolor='lightgrey',
+            ax=ax,
+            cbar_kws={'label': 'Correlation Coefficient', 'shrink': 0.7}
         )
-        plt.title(f"Correlation Matrix for Group: {group}")
+
+        ax.set_title(
+            f"Correlation Matrix — Group: {group}",
+            fontsize=13, fontweight='bold', pad=12
+        )
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+        ax.figure.axes[-1].yaxis.label.set_size(10)
+        ax.figure.axes[-1].tick_params(labelsize=9)
+
+        plt.tight_layout()
+        if save_prefix:
+            fig.savefig(f"{save_prefix}_{group}.png", dpi=600, bbox_inches='tight')
         plt.show()
 
-analyze_correlation(hne, found_genes, rr9_all_df=rr9_all_df)
-analyze_correlation(hne, genes_predictive_of_phenotypes, rr9_all_df=rr9_all_df)
+analyze_correlation(hne, found_genes, rr9_all_df=rr9_all_df, save_prefix="corr_hne_found")
+analyze_correlation(hne, genes_predictive_of_phenotypes, rr9_all_df=rr9_all_df, save_prefix="corr_hne_predictive")
 ```
 
 

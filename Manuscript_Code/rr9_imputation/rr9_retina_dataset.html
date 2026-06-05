@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Lauren Sanders, Jian Gong, Vaishnavi Nagesh">
+
+<title>RR9 Retina Dataset Integration</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="rr9_retina_dataset_files/libs/clipboard/clipboard.min.js"></script>
+<script src="rr9_retina_dataset_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="rr9_retina_dataset_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="rr9_retina_dataset_files/libs/quarto-html/popper.min.js"></script>
+<script src="rr9_retina_dataset_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="rr9_retina_dataset_files/libs/quarto-html/anchor.min.js"></script>
+<link href="rr9_retina_dataset_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="rr9_retina_dataset_files/libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="rr9_retina_dataset_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="rr9_retina_dataset_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="rr9_retina_dataset_files/libs/bootstrap/bootstrap-e5aac6255e56e914aa88ebe61abbe2ca.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-full">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#digital-twin-project-description" id="toc-digital-twin-project-description" class="nav-link active" data-scroll-target="#digital-twin-project-description">Digital Twin Project Description</a></li>
+  <li><a href="#rr9-background" id="toc-rr9-background" class="nav-link" data-scroll-target="#rr9-background">RR9 Background</a></li>
+  <li><a href="#load-data" id="toc-load-data" class="nav-link" data-scroll-target="#load-data">Load Data</a></li>
+  <li><a href="#data-exploration-and-validation" id="toc-data-exploration-and-validation" class="nav-link" data-scroll-target="#data-exploration-and-validation">Data Exploration and Validation</a></li>
+  <li><a href="#summary-of-the-merged-data-frame" id="toc-summary-of-the-merged-data-frame" class="nav-link" data-scroll-target="#summary-of-the-merged-data-frame">Summary of the Merged Data frame</a>
+  <ul>
+  <li><a href="#summary-table-of-patterns" id="toc-summary-table-of-patterns" class="nav-link" data-scroll-target="#summary-table-of-patterns">Summary Table of Patterns</a></li>
+  <li><a href="#practical-actions" id="toc-practical-actions" class="nav-link" data-scroll-target="#practical-actions">Practical Actions</a></li>
+  </ul></li>
+  <li><a href="#littles-mcar-test" id="toc-littles-mcar-test" class="nav-link" data-scroll-target="#littles-mcar-test">Little’s MCAR Test</a></li>
+  <li><a href="#pca-on-different-categories-of-datasets" id="toc-pca-on-different-categories-of-datasets" class="nav-link" data-scroll-target="#pca-on-different-categories-of-datasets">PCA on Different Categories of Datasets</a>
+  <ul>
+  <li><a href="#pca-on-rnaseq" id="toc-pca-on-rnaseq" class="nav-link" data-scroll-target="#pca-on-rnaseq">PCA on RNASeq</a></li>
+  <li><a href="#pca-on-rnaseq-for-only-predictive-genes-for-phenotype" id="toc-pca-on-rnaseq-for-only-predictive-genes-for-phenotype" class="nav-link" data-scroll-target="#pca-on-rnaseq-for-only-predictive-genes-for-phenotype">PCA on RNASeq for Only Predictive Genes for Phenotype</a></li>
+  <li><a href="#pca-on-phenotype-related-rnaseq-genes" id="toc-pca-on-phenotype-related-rnaseq-genes" class="nav-link" data-scroll-target="#pca-on-phenotype-related-rnaseq-genes">PCA on Phenotype Related RNASeq Genes</a></li>
+  <li><a href="#pca-on-proteomics" id="toc-pca-on-proteomics" class="nav-link" data-scroll-target="#pca-on-proteomics">PCA on Proteomics</a></li>
+  <li><a href="#pca-on-tunel-assay" id="toc-pca-on-tunel-assay" class="nav-link" data-scroll-target="#pca-on-tunel-assay">PCA on TUNEL Assay</a></li>
+  <li><a href="#pca-on-hne-immunostaining-micoscopy" id="toc-pca-on-hne-immunostaining-micoscopy" class="nav-link" data-scroll-target="#pca-on-hne-immunostaining-micoscopy">PCA on HNE Immunostaining Micoscopy</a></li>
+  <li><a href="#pca-on-micro-ct" id="toc-pca-on-micro-ct" class="nav-link" data-scroll-target="#pca-on-micro-ct">PCA on Micro CT</a></li>
+  <li><a href="#pca-on-combined-immunostaining-micoscopy-data-from-zo-1-pecam-pna-and-hne" id="toc-pca-on-combined-immunostaining-micoscopy-data-from-zo-1-pecam-pna-and-hne" class="nav-link" data-scroll-target="#pca-on-combined-immunostaining-micoscopy-data-from-zo-1-pecam-pna-and-hne">PCA on Combined Immunostaining Micoscopy data from Zo-1, PECAM, PNA and HNE</a></li>
+  </ul></li>
+  <li><a href="#data-analysis-correlation-between-hne-and-rnaseq" id="toc-data-analysis-correlation-between-hne-and-rnaseq" class="nav-link" data-scroll-target="#data-analysis-correlation-between-hne-and-rnaseq">Data Analysis Correlation Between HNE and RNASeq</a></li>
+  <li><a href="#data-analysis-correlation-between-tunel-assay-and-rnaseq" id="toc-data-analysis-correlation-between-tunel-assay-and-rnaseq" class="nav-link" data-scroll-target="#data-analysis-correlation-between-tunel-assay-and-rnaseq">Data Analysis Correlation Between TUNEL Assay and RNASeq</a></li>
+  <li><a href="#imputation-of-relevant-genes-from-tunel-data" id="toc-imputation-of-relevant-genes-from-tunel-data" class="nav-link" data-scroll-target="#imputation-of-relevant-genes-from-tunel-data">Imputation of Relevant Genes from Tunel data</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content column-page-left" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">RR9 Retina Dataset Integration</h1>
+</div>
+
+
+
+<div class="quarto-title-meta column-page-left">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Lauren Sanders, Jian Gong, Vaishnavi Nagesh </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="digital-twin-project-description" class="level2">
+<h2 class="anchored" data-anchor-id="digital-twin-project-description">Digital Twin Project Description</h2>
+<p>Space biology confronts a critical obstacle: the challenge of incomplete data due to the logistical complexities and high costs of space missions. Addressing this issue, this research presents strategies that integrate AI and digital twin technology to overcome the limitations posed by sparse datasets in space biology research.</p>
+<p>By presenting a cohesive strategy that combines synthetic data generation, automatic labeling, and advanced machine learning with digital twins, we showcase an application to the RR9 dataset at OSDR. This research aims to overcome the challenge of data scarcity in space biology, thereby forging a way to unlock insights into the potential of life beyond Earth.</p>
+</section>
+<section id="rr9-background" class="level2">
+<h2 class="anchored" data-anchor-id="rr9-background">RR9 Background</h2>
+<p>The Rodent Research 9 payload consisted of three space biology experiments designed to examine impacts of long-duration spaceflight on visual impairment and joint tissue degradation that affect astronauts.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Investigation</th>
+<th>Purpose</th>
+<th>Experiments</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Investigation 1</td>
+<td>Effects of microgravity on fluid shifts and increased fluid pressures that occur in the head.</td>
+<td>1. To determine whether spaceflight on the ISS alters rodent basilar artery spontaneous tone, myogenic and KCl (Potassium Chloride)-evoked vasoconstriction, mechanical stiffness and gross structure.<br> 2. To estimate whether spaceflight on the ISS alters the blood-brain barrier in rodents, as indicated by ultrastructural examination of the junctional complex of the cerebral capillary endothelium.<br> 3. To determine whether spaceflight on the ISS alters rodent basal vein (inside cranium) and jugular vein (outside cranium) spontaneous tone, myogenic and KCl-evoked constriction, distension, and gross structure.<br> 4. To determine whether spaceflight on the ISS alters the ability of the cervical lymphatics to modulate lymph flow, and thus, regulate cerebral fluid homeostasis.</td>
+</tr>
+<tr class="even">
+<td>Investigation 2</td>
+<td>Impact of spaceflight on the vessels that supply blood to the eyes.</td>
+<td>1. Define the relationships between spaceflight condition-induced oxidative stress in reactive oxygen species (ROS) expression and retinal vascular remodeling and BRB function in mice return to Earth alive.<br> 2. Determine whether spaceflight condition-induced oxidative damage in retina is mediated through photoreceptor mitochondrial ROS production.</td>
+</tr>
+<tr class="odd">
+<td>Investigation 3</td>
+<td>Extent of knee and hip joint degradation caused by prolonged exposure to weightlessness.</td>
+<td>1. Determine the extent of knee and hip joint degradation in mice after 30 days of spaceflight on the ISS.<br> 2. Use the DigiGait System to assess gait patterns before and after returning from the ISS.</td>
+</tr>
+</tbody>
+</table>
+<p>We are interested in the Retinal data and all things related to Eye. So, all the experiments related to Investigation 1 and 2 will be studied here. Below is the table of all OSD identifiers related to above investigations obtained from https://osdr.nasa.gov/bio/repo/data/payloads/RR-9</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Identifier</th>
+<th>Title</th>
+<th>Factors</th>
+<th>Assay Types</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="https://osdr.nasa.gov/bio/repo/data/studies/OSD-557">OSD-557</a></td>
+<td>Spaceflight influences gene expression, photoreceptor integrity, and oxidative stress related damage in the murine retina (RR-9)</td>
+<td>Spaceflight</td>
+<td>Bone Microstructure<br>Molecular Cellular Imaging<br>histology</td>
+</tr>
+<tr class="even">
+<td><a href="https://osdr.nasa.gov/bio/repo/data/studies/OSD-568">OSD-568</a></td>
+<td>Characterization of mouse ocular responses (Microscopy) to a 35-day (RR-9) spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations</td>
+<td>Spaceflight</td>
+<td>Molecular Cellular Imaging</td>
+</tr>
+<tr class="odd">
+<td><a href="https://osdr.nasa.gov/bio/repo/data/studies/OSD-715">OSD-715</a></td>
+<td>Characterization of mouse ocular response to a 35-day spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations - Proteomics data</td>
+<td>Spaceflight</td>
+<td>protein expression profiling</td>
+</tr>
+<tr class="even">
+<td><a href="https://osdr.nasa.gov/bio/repo/data/studies/OSD-255">OSD-255</a></td>
+<td>Spaceflight influences gene expression, photoreceptor integrity, and oxidative stress-related damage in the murine retina</td>
+<td>Spaceflight</td>
+<td>transcription profiling</td>
+</tr>
+<tr class="odd">
+<td><a href="https://osdr.nasa.gov/bio/repo/data/experiments/OS-140">OS-140</a></td>
+<td>Space Flight Environment Induces Remodeling of Vascular Network and Glia-Vascular Communication in Mouse Retina</td>
+<td>Spaceflight</td>
+<td></td>
+</tr>
+<tr class="even">
+<td><a href="https://osdr.nasa.gov/bio/repo/data/studies/OSD-583">OSD-583</a></td>
+<td>Characterization of mouse ocular responses (intraocular pressure) to a 35-day (RR-9) spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations</td>
+<td>Spaceflight</td>
+<td>Tonometry</td>
+</tr>
+</tbody>
+</table>
+<p>The purpose of this notebook is to combine all retina data from the <a href="https://osdr.nasa.gov/bio/repo/data/payloads/RR-9">Rodent Research 9</a> (RR9) mission from the <a href="https://www.nasa.gov/osdr/%20(OSDR)">NASA Open Science Data Repository</a>, perform exploratory data analysis, impute missing data and train a digital twin.</p>
+<p><strong>Original Author:</strong> Lauren Sanders</p>
+<p><strong>Additional Author(s):</strong> Jian Gong, Vaishnavi Nagesh</p>
+</section>
+<section id="load-data" class="level2">
+<h2 class="anchored" data-anchor-id="load-data">Load Data</h2>
+<p>We are downloading all the relevant data as shown in the the table below.</p>
+<p>::: {#cell-Load data Cell .cell execution_count=4}</p>
+<div id="load-data-cell" class="cell-output cell-output-display">
+<!--| quarto-html-table-processing: none -->
+<table id="itables_b5971e6d_ef24_4ffa_8f03_b0d26987670a">
+  <tbody>
+    <tr>
+      <td style="vertical-align:middle; text-align:left"><a href="https://mwouts.github.io/itables/"><svg class="main-svg" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" width="64" viewbox="0 0 500 400" style="font-family: 'Droid Sans', sans-serif;">
+    <g style="fill:#d9d7fc">
+        <path d="M100,400H500V357H100Z"></path>
+        <path d="M100,300H400V257H100Z"></path>
+        <path d="M0,200H400V157H0Z"></path>
+        <path d="M100,100H500V57H100Z"></path>
+        <path d="M100,350H500V307H100Z"></path>
+        <path d="M100,250H400V207H100Z"></path>
+        <path d="M0,150H400V107H0Z"></path>
+        <path d="M100,50H500V7H100Z"></path>
+    </g>
+    <g style="fill:#1a1366;stroke:#1a1366;">
+   <rect x="100" y="7" width="400" height="43">
+    <animate attributename="width" values="0;400;0" dur="5s" repeatcount="indefinite"></animate>
+      <animate attributename="x" values="100;100;500" dur="5s" repeatcount="indefinite"></animate>
+  </rect>
+        <rect x="0" y="107" width="400" height="43">
+    <animate attributename="width" values="0;400;0" dur="3.5s" repeatcount="indefinite"></animate>
+    <animate attributename="x" values="0;0;400" dur="3.5s" repeatcount="indefinite"></animate>
+  </rect>
+        <rect x="100" y="207" width="300" height="43">
+    <animate attributename="width" values="0;300;0" dur="3s" repeatcount="indefinite"></animate>
+    <animate attributename="x" values="100;100;400" dur="3s" repeatcount="indefinite"></animate>
+  </rect>
+        <rect x="100" y="307" width="400" height="43">
+    <animate attributename="width" values="0;400;0" dur="4s" repeatcount="indefinite"></animate>
+      <animate attributename="x" values="100;100;500" dur="4s" repeatcount="indefinite"></animate>
+  </rect>
+        <g style="fill:transparent;stroke-width:8; stroke-linejoin:round" rx="5">
+            <g transform="translate(45 50) rotate(-45)">
+                <circle r="33" cx="0" cy="0"></circle>
+                <rect x="-8" y="32" width="16" height="30"></rect>
+            </g>
+
+            <g transform="translate(450 152)">
+                <polyline points="-15,-20 -35,-20 -35,40 25,40 25,20"></polyline>
+                <rect x="-15" y="-40" width="60" height="60"></rect>
+            </g>
+
+            <g transform="translate(50 352)">
+                <polygon points="-35,-5 0,-40 35,-5"></polygon>
+                <polygon points="-35,10 0,45 35,10"></polygon>
+            </g>
+
+            <g transform="translate(75 250)">
+                <polyline points="-30,30 -60,0 -30,-30"></polyline>
+                <polyline points="0,30 -30,0 0,-30"></polyline>
+            </g>
+
+            <g transform="translate(425 250) rotate(180)">
+                <polyline points="-30,30 -60,0 -30,-30"></polyline>
+                <polyline points="0,30 -30,0 0,-30"></polyline>
+            </g>
+        </g>
+    </g>
+</svg>
+</a>
+        Loading ITables v2.8.0 from the internet...
+        (need <a href="https://mwouts.github.io/itables/troubleshooting.html">help</a>?)
+      </td>
+    </tr>
+  </tbody>
+</table>
+<link href="https://www.unpkg.com/dt_for_itables@2.5.4/dt_bundle.css" rel="stylesheet">
+<script type="module">
+    import { ITable, jQuery as $ } from 'https://www.unpkg.com/dt_for_itables@2.5.4/dt_bundle.js';
+
+    document.querySelectorAll("#itables_b5971e6d_ef24_4ffa_8f03_b0d26987670a:not(.dataTable)").forEach(table => {
+        if (!(table instanceof HTMLTableElement))
+            return;
+
+        let dt_args = {
+          "classes": ["display", "nowrap", "compact"],
+          "data_json": "[[\"rnaseq\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-255/download?source=datamanager&amp;file=GLDS-255_rna_seq_Normalized_Counts.csv\"], [\"Zo-1(ImmunoStaining Microcopy)\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&amp;file=LSDS-5_immunostaining_microscopy_Zo-1tr_TRANSFORMED.csv\"], [\"TUNEL Assay\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&amp;file=LSDS-5_immunostaining_microscopy_TUNELtr_TRANSFORMED.csv\"], [\"PECAM(ImmunoStaining Microscopy)\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-568/download?source=datamanager&amp;file=LSDS-5_immunostaining_microscopy_PECAMtr_TRANSFORMED.csv\"], [\"microct(Micro CT)\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&amp;file=LSDS-1_microCT_MicroCT_Transformed_Reusable_Results.csv\"], [\"PNA(ImmunoStaining Microscopy)\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&amp;file=LSDS-1_immunostaining_microscopy_PNAtr_Transformed_Reusable_Results.csv\"], [\"HNE(ImmunoStaining Microscopy)\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-557/download?source=datamanager&amp;file=LSDS-1_immunostaining_microscopy_HNEtr_Transformed_Reusable_Results.csv\"], [\"Tonometry\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-583/download?source=datamanager&amp;file=LSDS-16_tonometry_maoTRANSFORMED.csv\"], [\"Protein(Proteomics)\", \"https://osdr.nasa.gov/geode-py/ws/studies/OSD-715/download?source=datamanager&amp;file=GLDS-639_proteomics_01_Mao_RR9_Retina_092018_MQ_iBAQ.xlsx\"]]",
+          "layout": {"bottomEnd": null, "bottomStart": null, "topEnd": null, "topStart": null},
+          "order": [],
+          "style": {"caption-side": "bottom", "margin": "auto", "table-layout": "auto", "width": "auto"},
+          "table_html": "<table><thead>\n    <tr style=\"text-align: right;\">\n      \n      <th>Data Type</th>\n      <th>Data Links</th>\n    </tr>\n  </thead></table>",
+          "text_in_header_can_be_selected": true
+        };
+        new ITable(table, dt_args);
+    });
+</script>
+</div>
+<p>:::</p>
+</section>
+<section id="data-exploration-and-validation" class="level2">
+<h2 class="anchored" data-anchor-id="data-exploration-and-validation">Data Exploration and Validation</h2>
+<p>The below table shows number of features in each dataset that constitute the RR9 multi-modal data. This is useful in identifying the maximum number of PCA components required to explain the cumulative variance in the dataset.</p>
+<p>::: {#cell-Summarize Data .cell execution_count=6}</p>
+<div id="summarize-data" class="cell-output cell-output-display">
+<!--| quarto-html-table-processing: none -->
+<table id="itables_f586fd6d_2ba5_4dc8_ba91_e0805a51be87">
+  <tbody>
+    <tr>
+      <td style="vertical-align:middle; text-align:left"><a href="https://mwouts.github.io/itables/"><svg class="main-svg" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" width="64" viewbox="0 0 500 400" style="font-family: 'Droid Sans', sans-serif;">
+    <g style="fill:#d9d7fc">
+        <path d="M100,400H500V357H100Z"></path>
+        <path d="M100,300H400V257H100Z"></path>
+        <path d="M0,200H400V157H0Z"></path>
+        <path d="M100,100H500V57H100Z"></path>
+        <path d="M100,350H500V307H100Z"></path>
+        <path d="M100,250H400V207H100Z"></path>
+        <path d="M0,150H400V107H0Z"></path>
+        <path d="M100,50H500V7H100Z"></path>
+    </g>
+    <g style="fill:#1a1366;stroke:#1a1366;">
+   <rect x="100" y="7" width="400" height="43">
+    <animate attributename="width" values="0;400;0" dur="5s" repeatcount="indefinite"></animate>
+      <animate attributename="x" values="100;100;500" dur="5s" repeatcount="indefinite"></animate>
+  </rect>
+        <rect x="0" y="107" width="400" height="43">
+    <animate attributename="width" values="0;400;0" dur="3.5s" repeatcount="indefinite"></animate>
+    <animate attributename="x" values="0;0;400" dur="3.5s" repeatcount="indefinite"></animate>
+  </rect>
+        <rect x="100" y="207" width="300" height="43">
+    <animate attributename="width" values="0;300;0" dur="3s" repeatcount="indefinite"></animate>
+    <animate attributename="x" values="100;100;400" dur="3s" repeatcount="indefinite"></animate>
+  </rect>
+        <rect x="100" y="307" width="400" height="43">
+    <animate attributename="width" values="0;400;0" dur="4s" repeatcount="indefinite"></animate>
+      <animate attributename="x" values="100;100;500" dur="4s" repeatcount="indefinite"></animate>
+  </rect>
+        <g style="fill:transparent;stroke-width:8; stroke-linejoin:round" rx="5">
+            <g transform="translate(45 50) rotate(-45)">
+                <circle r="33" cx="0" cy="0"></circle>
+                <rect x="-8" y="32" width="16" height="30"></rect>
+            </g>
+
+            <g transform="translate(450 152)">
+                <polyline points="-15,-20 -35,-20 -35,40 25,40 25,20"></polyline>
+                <rect x="-15" y="-40" width="60" height="60"></rect>
+            </g>
+
+            <g transform="translate(50 352)">
+                <polygon points="-35,-5 0,-40 35,-5"></polygon>
+                <polygon points="-35,10 0,45 35,10"></polygon>
+            </g>
+
+            <g transform="translate(75 250)">
+                <polyline points="-30,30 -60,0 -30,-30"></polyline>
+                <polyline points="0,30 -30,0 0,-30"></polyline>
+            </g>
+
+            <g transform="translate(425 250) rotate(180)">
+                <polyline points="-30,30 -60,0 -30,-30"></polyline>
+                <polyline points="0,30 -30,0 0,-30"></polyline>
+            </g>
+        </g>
+    </g>
+</svg>
+</a>
+        Loading ITables v2.8.0 from the internet...
+        (need <a href="https://mwouts.github.io/itables/troubleshooting.html">help</a>?)
+      </td>
+    </tr>
+  </tbody>
+</table>
+<link href="https://www.unpkg.com/dt_for_itables@2.5.4/dt_bundle.css" rel="stylesheet">
+<script type="module">
+    import { ITable, jQuery as $ } from 'https://www.unpkg.com/dt_for_itables@2.5.4/dt_bundle.js';
+
+    document.querySelectorAll("#itables_f586fd6d_2ba5_4dc8_ba91_e0805a51be87:not(.dataTable)").forEach(table => {
+        if (!(table instanceof HTMLTableElement))
+            return;
+
+        let dt_args = {
+          "classes": ["display", "nowrap", "compact"],
+          "data_json": "[[\"tonometry\", \"(100, 8)\"], [\"rnaseq\", \"(16, 23419)\"], [\"protein\", \"(12, 6634)\"], [\"zo1\", \"(12, 1)\"], [\"tunel\", \"(23, 5)\"], [\"pecam\", \"(11, 1)\"], [\"microct\", \"(12, 12)\"], [\"pna\", \"(10, 4)\"], [\"hne\", \"(23, 5)\"]]",
+          "layout": {"bottomEnd": null, "bottomStart": null, "topEnd": null, "topStart": null},
+          "order": [],
+          "style": {"caption-side": "bottom", "margin": "auto", "table-layout": "auto", "width": "auto"},
+          "table_html": "<table><thead>\n    <tr style=\"text-align: right;\">\n      \n      <th>Data</th>\n      <th>Rows X Features</th>\n    </tr>\n  </thead></table>",
+          "text_in_header_can_be_selected": true
+        };
+        new ITable(table, dt_args);
+    });
+</script>
+</div>
+<p>:::</p>
+</section>
+<section id="summary-of-the-merged-data-frame" class="level2">
+<h2 class="anchored" data-anchor-id="summary-of-the-merged-data-frame">Summary of the Merged Data frame</h2>
+<p>::: {#cell-Summarize Data Merged Data Frame .cell execution_count=7}</p>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/summarize-data-merged-data-frame-output-1.png" id="summarize-data-merged-data-frame" width="8598" height="4148" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<p>:::</p>
+<div id="bdf6e863" class="cell" data-execution_count="8">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Nullity Correlation Matrix</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># This step ensures all categories appear, even if all values are False (not missing)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>category_missing <span class="op">=</span> rr9_all_df.isnull().T.groupby(category_series).<span class="bu">any</span>().T</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Add missing categories as all False if necessary</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> cat <span class="kw">in</span> cat_cols:</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> cat <span class="kw">not</span> <span class="kw">in</span> category_missing.columns:</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        category_missing[cat] <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>category_nullity_corr <span class="op">=</span> category_missing.corr().fillna(<span class="dv">0</span>)  <span class="co"># Fill NaN with 0 for display</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>category_nullity_corr <span class="op">=</span> category_nullity_corr[cat_cols.keys()].loc[cat_cols.keys()]</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>category_nullity_corr_display <span class="op">=</span> category_nullity_corr.copy()</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>category_nullity_corr_display.index   <span class="op">=</span> [s.upper() <span class="cf">for</span> s <span class="kw">in</span> category_nullity_corr_display.index]</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>category_nullity_corr_display.columns <span class="op">=</span> [s.upper() <span class="cf">for</span> s <span class="kw">in</span> category_nullity_corr_display.columns]</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">9</span>, <span class="dv">8</span>), dpi<span class="op">=</span><span class="dv">600</span>)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>sns.heatmap(</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    category_nullity_corr_display,</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    annot<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">=</span><span class="st">".2f"</span>,</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    annot_kws<span class="op">=</span>{<span class="st">"size"</span>: <span class="dv">9</span>, <span class="st">"weight"</span>: <span class="st">"bold"</span>},</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    cmap<span class="op">=</span><span class="st">'coolwarm_r'</span>,</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    center<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    vmin<span class="op">=-</span><span class="dv">1</span>,</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    vmax<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    linewidths<span class="op">=</span><span class="fl">0.5</span>,</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    linecolor<span class="op">=</span><span class="st">"lightgrey"</span>,</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    ax<span class="op">=</span>ax,</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    cbar_kws<span class="op">=</span>{<span class="st">"shrink"</span>: <span class="fl">0.8</span>, <span class="st">"label"</span>: <span class="st">"Pearson Correlation"</span>}</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>ax.set_title(</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Nullity Correlation Matrix by Data Category"</span>,</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">"bold"</span>, pad<span class="op">=</span><span class="dv">14</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"Categories"</span>, fontsize<span class="op">=</span><span class="dv">12</span>, labelpad<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"Categories"</span>, fontsize<span class="op">=</span><span class="dv">12</span>, labelpad<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>ax.set_xticklabels(ax.get_xticklabels(), fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">"bold"</span>, rotation<span class="op">=</span><span class="dv">45</span>, ha<span class="op">=</span><span class="st">"right"</span>)</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>ax.set_yticklabels(ax.get_yticklabels(), fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">"bold"</span>, rotation<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>ax.figure.axes[<span class="op">-</span><span class="dv">1</span>].yaxis.label.set_size(<span class="dv">10</span>)</span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>plt.savefig(<span class="st">"nullity_correlation_matrix.png"</span>, dpi<span class="op">=</span><span class="dv">600</span>, bbox_inches<span class="op">=</span><span class="st">"tight"</span>)</span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/cell-9-output-1.png" width="5256" height="4739" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Final Interpretation tonometry:</p>
+<p>The row/column is all zeros, indicating there is no missing data in tonometry (and so, by definition, no correlation of missingness with any other category).</p>
+<p>The gray/neutral coloring visually reinforces the absence of missingness relationships for this category.</p>
+<p>Summary:</p>
+<ul>
+<li><p>Zeros for categories without missing data (like tonometry).</p></li>
+<li><p>Blues for high co-missingness (correlation ≈ 1).</p></li>
+<li><p>Reds for opposite-missingness (correlation &lt; 0).</p></li>
+<li><p>Whites/near 0 for no relationship.</p></li>
+</ul>
+<ol type="1">
+<li>Tonometry Row and column of all zeros</li>
+</ol>
+<p>Interpretation: There is complete data for tonometry—no samples are missing tonometry measurements. It is independent of the missingness of any other category.</p>
+<ol start="2" type="1">
+<li>Clusters of Strong Positive Correlation (Blue, Values ≈ 0.8–1.0) pecam, pna, zo1, tunel, hne, maseq: These categories have high positive correlations, meaning when a sample is missing data in one, it is typically missing data in the others.</li>
+</ol>
+<p>Interpretation: These categories likely share experimental steps, batch effects, or biological circumstances leading to simultaneous missingness. For example, if a tissue sample was lost or not processed further, all dependent assays (pecam, pna, zo1, tunel, hne, maseq) might be missing for that case.</p>
+<ol start="3" type="1">
+<li>microct Low correlations (values near zero or slightly negative) with other categories</li>
+</ol>
+<p>Interpretation: Missingness in microct is largely independent of other categories. If a sample is missing microct data, it doesn’t predict missingness in other categories and vice versa. microct may face independent measurement or processing issues.</p>
+<ol start="4" type="1">
+<li>protein Mostly weak or negative correlations with other categories</li>
+</ol>
+<p>Interpretation: protein’s missingness does not closely follow others; it may have unique reasons for being absent (different protocol, failed assay, etc.).</p>
+<ol start="5" type="1">
+<li>Negative Correlations (Red, e.g.&nbsp;~ -0.16 for maseq/protein, pecam/protein, etc.) Interpretation: There is a slight tendency for samples missing one of these pairs to be present in the other. Not a strong effect, but it may point to mutually exclusive failures in certain scenarios.</li>
+</ol>
+<section id="summary-table-of-patterns" class="level3">
+<h3 class="anchored" data-anchor-id="summary-table-of-patterns">Summary Table of Patterns</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 16%">
+<col style="width: 46%">
+<col style="width: 36%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Category</th>
+<th>Strongly Linked Missingness</th>
+<th>Independent/Negative</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>tonometry</td>
+<td>None (always complete)</td>
+<td>All</td>
+</tr>
+<tr class="even">
+<td>pecam, pna, zo1, tunel, hne, maseq</td>
+<td>Each other (clustered)</td>
+<td>microct, protein</td>
+</tr>
+<tr class="odd">
+<td>microct</td>
+<td>None</td>
+<td>Other categories(mostly weak)</td>
+</tr>
+<tr class="even">
+<td>protein</td>
+<td>None</td>
+<td>Whitish to red with others</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="practical-actions" class="level3">
+<h3 class="anchored" data-anchor-id="practical-actions">Practical Actions</h3>
+<p>Impute or interpret missingness jointly for the strongly linked group (pecam, pna, zo1, tunel, hne, maseq).</p>
+<p>Handle microct and protein separately, as their missing data mechanisms are independent.</p>
+<p>No missingness work is needed for tonometry.</p>
+</section>
+</section>
+<section id="littles-mcar-test" class="level2">
+<h2 class="anchored" data-anchor-id="littles-mcar-test">Little’s MCAR Test</h2>
+<div id="1c73a27e" class="cell" data-execution_count="9">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> {}</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> cat <span class="kw">in</span> category_missing.columns:</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    X <span class="op">=</span> category_missing.drop(columns<span class="op">=</span>cat)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> category_missing[cat]</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Skip if y has only one class (all 0s or all 1s)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> y.nunique() <span class="op">&lt;</span> <span class="dv">2</span>:</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Skipping </span><span class="sc">{</span>cat<span class="sc">}</span><span class="ss">: only one class present in missingness indicator."</span>)</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    clf <span class="op">=</span> LogisticRegression()</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    clf.fit(X, y)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    score <span class="op">=</span> clf.score(X, y)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    results[cat] <span class="op">=</span> score</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Model accuracy for predicting missingness in each category:"</span>)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(results)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Skipping tonometry: only one class present in missingness indicator.
+Model accuracy for predicting missingness in each category:
+{'hne': 0.98, 'microct': 0.88, 'pecam': 1.0, 'pna': 0.99, 'protein': 0.88, 'rnaseq': 0.95, 'tunel': 0.98, 'zo1': 0.99}</code></pre>
+</div>
+</div>
+<p>Tonometry was skipped (only one class—no missing values, so nothing to model or impute).</p>
+<p>For all other categories, the logistic regression models predict missingness very accurately (scores from 0.88 to 1.0).</p>
+<ul>
+<li>Interpretation:
+<ul>
+<li><p>High accuracy for all other categories (~0.88–1.0):</p></li>
+<li><p>The missingness in each of these categories is highly predictable from the missingness in other categories.</p></li>
+<li><p>This is strong evidence for the MAR (Missing At Random) mechanism:</p></li>
+<li><p>Missingness depends on observed data (other categories), not on unobserved values within the category itself.</p></li>
+</ul></li>
+</ul>
+<p>It also shows the missing data structure is very systematic, not random!</p>
+<ul>
+<li><p>Imputation guidance:</p>
+<ul>
+<li><p>Since missingness is MAR, multivariate imputation methods (like MICE or KNNImputer) are recommended because they use information from other variables when filling in missing values.</p></li>
+<li><p>Avoid simple mean/median imputation: it ignores the structure you’ve discovered.</p></li>
+</ul></li>
+</ul>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 10%">
+<col style="width: 8%">
+<col style="width: 14%">
+<col style="width: 32%">
+<col style="width: 34%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Category</th>
+<th>Skipped</th>
+<th>Model Accuracy</th>
+<th>Missingness Mechanism Suggestion</th>
+<th>Imputation Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>tonometry</td>
+<td>Yes</td>
+<td>—</td>
+<td>Complete data (no missingness)</td>
+<td>None needed</td>
+</tr>
+<tr class="even">
+<td>hne</td>
+<td>No</td>
+<td>0.98</td>
+<td>MAR</td>
+<td>Use multivariate methods (e.g., MICE)</td>
+</tr>
+<tr class="odd">
+<td>microct</td>
+<td>No</td>
+<td>0.88</td>
+<td>MAR</td>
+<td>Use multivariate methods</td>
+</tr>
+<tr class="even">
+<td>pecam</td>
+<td>No</td>
+<td>1.00</td>
+<td>MAR (perfectly explained)</td>
+<td>Use multivariate methods</td>
+</tr>
+<tr class="odd">
+<td>pna</td>
+<td>No</td>
+<td>0.99</td>
+<td>MAR</td>
+<td>Use multivariate methods</td>
+</tr>
+<tr class="even">
+<td>protein</td>
+<td>No</td>
+<td>0.88</td>
+<td>MAR</td>
+<td>Use multivariate methods</td>
+</tr>
+<tr class="odd">
+<td>rnaseq</td>
+<td>No</td>
+<td>0.95</td>
+<td>MAR</td>
+<td>Use multivariate methods</td>
+</tr>
+<tr class="even">
+<td>tunel</td>
+<td>No</td>
+<td>0.98</td>
+<td>MAR</td>
+<td>Use multivariate methods</td>
+</tr>
+<tr class="odd">
+<td>zo1</td>
+<td>No</td>
+<td>0.99</td>
+<td>MAR</td>
+<td>Use multivariate methods</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<div id="df9383e5" class="cell" data-execution_count="10">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># %%</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.spatial.distance <span class="im">import</span> squareform</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.cluster.hierarchy <span class="im">import</span> linkage, dendrogram</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Assume you already have: ---</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="co"># full_df               : your main DataFrame</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co"># cat_cols (dict)       : {'category1': [colA, colB, ...], ...} for all categories</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Build category-level nullity matrix</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>category_null_matrix <span class="op">=</span> pd.DataFrame(index<span class="op">=</span>rr9_all_df.index)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> cat, cols <span class="kw">in</span> cat_cols.items():</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    present_cols <span class="op">=</span> [col <span class="cf">for</span> col <span class="kw">in</span> cols <span class="cf">if</span> col <span class="kw">in</span> rr9_all_df.columns]</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Category is "missing" if ALL its columns are missing in a row; change .all() to .any() for stricter/looser rule</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    category_null_matrix[cat] <span class="op">=</span> rr9_all_df[present_cols].isnull().<span class="bu">all</span>(axis<span class="op">=</span><span class="dv">1</span>).astype(<span class="bu">int</span>)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Compute correlation and distance matrix among categories</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>null_corr <span class="op">=</span> category_null_matrix.corr()</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>distance_matrix <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> null_corr.<span class="bu">abs</span>()</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>_dm <span class="op">=</span> distance_matrix.to_numpy(copy<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>np.fill_diagonal(_dm, <span class="dv">0</span>)</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>distance_matrix <span class="op">=</span> pd.DataFrame(_dm, index<span class="op">=</span>distance_matrix.index, columns<span class="op">=</span>distance_matrix.columns)</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>distance_matrix <span class="op">=</span> distance_matrix.replace([np.inf, <span class="op">-</span>np.inf], <span class="dv">1</span>).fillna(<span class="dv">1</span>)</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>condensed_distance <span class="op">=</span> squareform(distance_matrix.values, checks<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Cluster and plot vertical dendrogram</span></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>linkage_matrix <span class="op">=</span> linkage(condensed_distance, method<span class="op">=</span><span class="st">'average'</span>)</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">7</span>, <span class="dv">8</span>), dpi<span class="op">=</span><span class="dv">600</span>)</span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>ax <span class="op">=</span> plt.gca()</span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>dendrogram(</span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>    linkage_matrix,</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>    labels<span class="op">=</span>[s.upper() <span class="cf">for</span> s <span class="kw">in</span> cat_cols.keys()],</span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>    orientation<span class="op">=</span><span class="st">'right'</span>,</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>    leaf_rotation<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>    leaf_font_size<span class="op">=</span><span class="dv">11</span>,</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>    above_threshold_color<span class="op">=</span><span class="st">'#444444'</span>,</span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>    color_threshold<span class="op">=</span><span class="fl">0.4</span> <span class="op">*</span> <span class="bu">max</span>(linkage_matrix[:, <span class="dv">2</span>])</span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>ax.set_title(</span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Hierarchical Clustering of Categories</span><span class="ch">\n</span><span class="st">by Missingness Pattern'</span>,</span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    fontsize<span class="op">=</span><span class="dv">13</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, pad<span class="op">=</span><span class="dv">12</span></span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">'Distance'</span>, fontsize<span class="op">=</span><span class="dv">11</span>, labelpad<span class="op">=</span><span class="dv">8</span>)</span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'Category'</span>, fontsize<span class="op">=</span><span class="dv">11</span>, labelpad<span class="op">=</span><span class="dv">8</span>)</span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>ax.tick_params(axis<span class="op">=</span><span class="st">'x'</span>, labelsize<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a>ax.spines[<span class="st">'top'</span>].set_visible(<span class="va">False</span>)</span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>ax.spines[<span class="st">'right'</span>].set_visible(<span class="va">False</span>)</span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>plt.savefig(<span class="st">"nullity_dendrogram.png"</span>, dpi<span class="op">=</span><span class="dv">600</span>, bbox_inches<span class="op">=</span><span class="st">"tight"</span>)</span>
+<span id="cb4-56"><a href="#cb4-56" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/cell-11-output-1.png" width="4139" height="4740" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>Next Steps:</strong> - Proceed with a multivariate imputation approach for the MAR categories. - No imputation needed for <code>tonometry</code>.</p>
+</section>
+<section id="pca-on-different-categories-of-datasets" class="level2">
+<h2 class="anchored" data-anchor-id="pca-on-different-categories-of-datasets">PCA on Different Categories of Datasets</h2>
+<section id="pca-on-rnaseq" class="level4">
+<h4 class="anchored" data-anchor-id="pca-on-rnaseq">PCA on RNASeq</h4>
+<div id="pca-on-rnaseq" class="cell" data-execution_count="12">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-rnaseq-output-1.png" id="pca-on-rnaseq-1" width="5938" height="2338" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-rnaseq-output-2.png" id="pca-on-rnaseq-2" width="3424" height="3499" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="pca-on-rnaseq-for-only-predictive-genes-for-phenotype" class="level4">
+<h4 class="anchored" data-anchor-id="pca-on-rnaseq-for-only-predictive-genes-for-phenotype">PCA on RNASeq for Only Predictive Genes for Phenotype</h4>
+<div id="pca-on-rnaseq-of-predictive-genes" class="cell" data-execution_count="13">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-rnaseq-of-predictive-genes-output-1.png" id="pca-on-rnaseq-of-predictive-genes-1" width="5938" height="2338" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-rnaseq-of-predictive-genes-output-2.png" id="pca-on-rnaseq-of-predictive-genes-2" width="3386" height="3496" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/var/folders/z2/s8dllncn3vjbz40m8g4cmlrm0000gn/T/ipykernel_2779/23714526.py:36: UserWarning:
+
+FigureCanvasAgg is non-interactive, and thus cannot be shown
+</code></pre>
+</div>
+</div>
+</section>
+<section id="pca-on-phenotype-related-rnaseq-genes" class="level4">
+<h4 class="anchored" data-anchor-id="pca-on-phenotype-related-rnaseq-genes">PCA on Phenotype Related RNASeq Genes</h4>
+<div id="pca-on-phenotype-related-genes-rnaseq" class="cell" data-execution_count="14">
+<div class="cell-output cell-output-stdout">
+<pre><code>51 genes found in the RNASeq dataset.</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-phenotype-related-genes-rnaseq-output-2.png" id="pca-on-phenotype-related-genes-rnaseq-1" width="5938" height="2338" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-phenotype-related-genes-rnaseq-output-3.png" id="pca-on-phenotype-related-genes-rnaseq-2" width="3379" height="3487" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/var/folders/z2/s8dllncn3vjbz40m8g4cmlrm0000gn/T/ipykernel_2779/1362596538.py:14: UserWarning:
+
+FigureCanvasAgg is non-interactive, and thus cannot be shown
+</code></pre>
+</div>
+</div>
+</section>
+<section id="pca-on-proteomics" class="level4">
+<h4 class="anchored" data-anchor-id="pca-on-proteomics">PCA on Proteomics</h4>
+<div id="pca-on-proteomics" class="cell" data-execution_count="15">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-proteomics-output-1.png" id="pca-on-proteomics-1" width="5938" height="2338" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-proteomics-output-2.png" id="pca-on-proteomics-2" width="3417" height="3487" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="15">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-proteomics-output-3.png" id="pca-on-proteomics-3" width="3417" height="3487" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="pca-on-tunel-assay" class="level4">
+<h4 class="anchored" data-anchor-id="pca-on-tunel-assay">PCA on TUNEL Assay</h4>
+<div id="pca-on-tunel-assay" class="cell" data-execution_count="16">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-tunel-assay-output-1.png" id="pca-on-tunel-assay-1" width="5938" height="2338" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-tunel-assay-output-2.png" id="pca-on-tunel-assay-2" width="3430" height="3487" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="16">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-tunel-assay-output-3.png" id="pca-on-tunel-assay-3" width="3430" height="3487" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="pca-on-hne-immunostaining-micoscopy" class="level4">
+<h4 class="anchored" data-anchor-id="pca-on-hne-immunostaining-micoscopy">PCA on HNE Immunostaining Micoscopy</h4>
+<div id="pca-on-hne-data" class="cell" data-execution_count="17">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-hne-data-output-1.png" id="pca-on-hne-data-1" width="5938" height="2338" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-hne-data-output-2.png" id="pca-on-hne-data-2" width="3422" height="3502" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/var/folders/z2/s8dllncn3vjbz40m8g4cmlrm0000gn/T/ipykernel_2779/3355970373.py:3: UserWarning:
+
+FigureCanvasAgg is non-interactive, and thus cannot be shown
+</code></pre>
+</div>
+</div>
+</section>
+<section id="pca-on-micro-ct" class="level4">
+<h4 class="anchored" data-anchor-id="pca-on-micro-ct">PCA on Micro CT</h4>
+<div id="pca-on-micro-ct-data" class="cell" data-execution_count="18">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-micro-ct-data-output-1.png" id="pca-on-micro-ct-data-1" width="5938" height="2338" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-on-micro-ct-data-output-2.png" id="pca-on-micro-ct-data-2" width="3379" height="3487" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/var/folders/z2/s8dllncn3vjbz40m8g4cmlrm0000gn/T/ipykernel_2779/4281597862.py:3: UserWarning:
+
+FigureCanvasAgg is non-interactive, and thus cannot be shown
+</code></pre>
+</div>
+</div>
+</section>
+<section id="pca-on-combined-immunostaining-micoscopy-data-from-zo-1-pecam-pna-and-hne" class="level4">
+<h4 class="anchored" data-anchor-id="pca-on-combined-immunostaining-micoscopy-data-from-zo-1-pecam-pna-and-hne">PCA on Combined Immunostaining Micoscopy data from Zo-1, PECAM, PNA and HNE</h4>
+<p>Zo-1, PECAM, PNA and HNE are all immunostaining microscopy. It would be useful to see if combining them all helps in better separation between the groups.</p>
+<div id="pca-by-combining-all-immunostaining-microscopy-data" class="cell" data-execution_count="19">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-by-combining-all-immunostaining-microscopy-data-output-1.png" id="pca-by-combining-all-immunostaining-microscopy-data-1" width="5938" height="2338" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/pca-by-combining-all-immunostaining-microscopy-data-output-2.png" id="pca-by-combining-all-immunostaining-microscopy-data-2" width="3428" height="3487" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/var/folders/z2/s8dllncn3vjbz40m8g4cmlrm0000gn/T/ipykernel_2779/1735552062.py:4: UserWarning:
+
+FigureCanvasAgg is non-interactive, and thus cannot be shown
+</code></pre>
+</div>
+</div>
+<p>From the PCA analysis of different datasets, it seems like there is fair separation betwee flight and other groups. However, there isn’t sufficient data to show separation between GC, Viv and CC groups.</p>
+</section>
+</section>
+<section id="data-analysis-correlation-between-hne-and-rnaseq" class="level2">
+<h2 class="anchored" data-anchor-id="data-analysis-correlation-between-hne-and-rnaseq">Data Analysis Correlation Between HNE and RNASeq</h2>
+<p>HNE Immunostaining microscopy has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both HNE and RNASeq.</p>
+<p>To be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and HNE needs to be determined.</p>
+<div id="function-definition-for-analyzing-correlation" class="cell" data-execution_count="20">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/function-definition-for-analyzing-correlation-output-1.png" id="function-definition-for-analyzing-correlation-1" width="4693" height="3540" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/function-definition-for-analyzing-correlation-output-2.png" id="function-definition-for-analyzing-correlation-2" width="4693" height="3540" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/function-definition-for-analyzing-correlation-output-3.png" id="function-definition-for-analyzing-correlation-3" width="4693" height="3540" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/function-definition-for-analyzing-correlation-output-4.png" id="function-definition-for-analyzing-correlation-4" width="4693" height="3540" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="data-analysis-correlation-between-tunel-assay-and-rnaseq" class="level2">
+<h2 class="anchored" data-anchor-id="data-analysis-correlation-between-tunel-assay-and-rnaseq">Data Analysis Correlation Between TUNEL Assay and RNASeq</h2>
+<p>The reason to select TUNEL for correlation analysis is that TUNEL assay points seem to separate out cleaner on the PCA plots than HNE data points between different groups. TUNEL Assay has data across four different groups (F, GC, Viv, CC2) and RNASeq is available for two different groups (F and GC). Among these F15-F20 and GC15-20 have data for both TUNEL and RNASeq.</p>
+<p>To be able to anchor the imputation of RNASeq data onto biological characteristic, the correlation between RNASeq and TUNEL needs to be determined.</p>
+<div id="correlation-analysis-on-found-genes-and-tunel-data" class="cell" data-execution_count="21">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/correlation-analysis-on-found-genes-and-tunel-data-output-1.png" id="correlation-analysis-on-found-genes-and-tunel-data-1" width="4693" height="3540" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/correlation-analysis-on-found-genes-and-tunel-data-output-2.png" id="correlation-analysis-on-found-genes-and-tunel-data-2" width="4693" height="3540" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/correlation-analysis-on-found-genes-and-tunel-data-output-3.png" id="correlation-analysis-on-found-genes-and-tunel-data-3" width="4693" height="3540" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="rr9_retina_dataset_files/figure-html/correlation-analysis-on-found-genes-and-tunel-data-output-4.png" id="correlation-analysis-on-found-genes-and-tunel-data-4" width="4693" height="3540" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="imputation-of-relevant-genes-from-tunel-data" class="level1">
+<h1>Imputation of Relevant Genes from Tunel data</h1>
+<p>First step is to see how many genes of the interested gene list do not have data. Imputation will be done in two groups: F(light) and not F(light). Samples F9 and F11 have RNASeq values, but not TUNEL assay values.</p>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

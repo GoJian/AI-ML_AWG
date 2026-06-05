@@ -39,6 +39,7 @@ import joblib
 import requests
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, leaves_list, dendrogram
+import itertools
 import logging
 import os
 
@@ -67,36 +68,61 @@ merged_non_flight_data = merged_non_flight_data[non_flight_column_order]
 id_columns = ['Source Name', 'Group']
 clustering_columns = [c for c in full_df.columns if c not in id_columns]
 
-# 2. Compute nullity matrix and correlation
+# Compute nullity matrix and correlation
 null_matrix = full_df[clustering_columns].isnull().astype(int)
 null_corr = null_matrix.corr()
 
-# 3. Distance matrix (distance = 1 - abs(correlation))
+# Distance matrix (distance = 1 - abs(correlation))
 distance_matrix = 1 - null_corr.abs()
-np.fill_diagonal(distance_matrix.values, 0)
+_dm = distance_matrix.to_numpy(copy=True)
+np.fill_diagonal(_dm, 0)
+distance_matrix = pd.DataFrame(_dm, index=distance_matrix.index, columns=distance_matrix.columns)
 distance_matrix = distance_matrix.replace([np.inf, -np.inf], 1).fillna(1)
 
-# 4. Convert to condensed form
 condensed_distance = squareform(distance_matrix.values, checks=False)
-
-# 5. Hierarchical clustering & ordering
 linkage_matrix = linkage(condensed_distance, method='average')
 column_order_indices = leaves_list(linkage_matrix)
 ordered_clustering_columns = [clustering_columns[i] for i in column_order_indices]
 
-plt.figure(figsize=(12,6))
+import sys
+sys.setrecursionlimit(10000)
+
+fig, ax = plt.subplots(figsize=(14, 7), dpi=600)
 dendrogram(
     linkage_matrix,
     labels=clustering_columns,
     orientation='top',
     leaf_rotation=90,
-    truncate_mode='lastp',   # Show only last merged clusters
-    p=25                     # Show only last 25 clusters
+    leaf_font_size=6,
+    truncate_mode='lastp',
+    p=30,
+    show_contracted=True,
+    above_threshold_color='#444444',
+    color_threshold=0.4 * max(linkage_matrix[:, 2]),
+    ax=ax
 )
-plt.title('Truncated Dendrogram of Columns by Nullity Pattern')
-plt.xlabel('Features')
-plt.ylabel('Distance')
+ax.set_title('Hierarchical Clustering of Features by Missingness Pattern',
+             fontsize=16, fontweight='bold', pad=14)
+ax.set_xlabel('Features', fontsize=14, fontweight='bold', labelpad=10)
+ax.set_ylabel('Distance', fontsize=14, fontweight='bold', labelpad=10)
+ax.tick_params(axis='y', labelsize=12)
+ax.tick_params(axis='x', labelsize=12)
+for label in ax.get_xticklabels() + ax.get_yticklabels():
+    label.set_fontweight('bold')
+ymin, ymax = ax.get_ylim()
+ax.set_ylim(bottom=-0.02 * ymax)
+ax.tick_params(axis='x', pad=4)
+
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.spines['bottom'].set_linewidth(1.2)
+ax.spines['left'].set_linewidth(1.2)
+
+for line in ax.get_lines():
+    line.set_linewidth(1.8)
+
 plt.tight_layout()
+plt.savefig("nullity_dendrogram_features.png", dpi=600, bbox_inches='tight')
 plt.show()
 
 # 6. Final ordered columns: id columns + clustered columns
@@ -104,7 +130,7 @@ final_order = id_columns + ordered_clustering_columns
 ordered_df = full_df[final_order]
 
 
-print("Final optimal column order:", final_order{0:10})
+print("Final optimal column order:", final_order[:10])
 # ordered_df is ready for imputation, with 'Group' available for grouping!
 
 ```
@@ -115,12 +141,46 @@ print("Final optimal column order:", final_order{0:10})
 ```{python}
 #| echo: false
 #| label: Correlation Function
-N = 100  # adjust as needed
+N = 50  # adjust as needed
 
-def plot_correlation_matrix(df, title):
+from IPython.display import display as _display
+
+def plot_correlation_matrix(df, title, save_path=None):
     corr_matrix = df.corr(numeric_only=True).iloc[:N, :N]
-    fig = px.imshow(corr_matrix, text_auto=True, title=title)
-    return fig
+    n = len(corr_matrix)
+    fig_w = min(10, max(6, n * 0.55))
+    fig_h = min(10, max(6, n * 0.45))
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=600)
+    sns.heatmap(
+        corr_matrix,
+        cmap='coolwarm',
+        center=0,
+        vmin=-1, vmax=1,
+        annot=(n <= 20),
+        fmt='.2f' if n <= 20 else '',
+        annot_kws={"size": 7, "weight": "bold"} if n <= 20 else {},
+        linewidths=0.3,
+        linecolor='lightgrey',
+        ax=ax,
+        cbar_kws={"shrink": 0.7, "label": "Pearson Correlation"}
+    )
+    ax.set_title(title, fontsize=14, fontweight='bold', pad=12)
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=7, rotation=90, ha='center')
+    ax.set_yticklabels(ax.get_yticklabels(), fontsize=7, rotation=0)
+    ax.figure.axes[-1].yaxis.label.set_size(12)
+    ax.figure.axes[-1].tick_params(labelsize=12)
+
+    plt.tight_layout()
+
+    # Auto-generate save path from title if not provided
+    if save_path is None:
+        safe_name = title.lower().replace(' ', '_').replace('(', '').replace(')', '').replace('/', '_')
+        save_path = f"{safe_name}.png"
+    fig.savefig(save_path, dpi=600, bbox_inches='tight')
+
+    _display(fig)
+    plt.close(fig)
 ```
 
 ## KNN Imputer
@@ -148,8 +208,7 @@ else:
   filename = 'knn2_impute_flight_pipeline.joblib'
   joblib.dump(knn_impute_pipe, filename)
 
-fig = plot_correlation_matrix(imp_df_flight_knn2, "KNN-2 Correlation Matrix (Top 50x50)")
-fig.show()
+plot_correlation_matrix(imp_df_flight_knn2, "KNN-2 Correlation Matrix (Top 50x50)")
 ```
 
 ### Non-Flight Data
@@ -174,31 +233,98 @@ else:
   imp_df_non_flight_knn2['Group'] = merged_non_flight_data['Group']
   imp_df_non_flight_knn2.to_csv('non_flight_imputed_knn2.csv', index=False)
   joblib.dump(knn_impute_pipe, 'knn2_impute_non_flight_pipeline.joblib')
-fig = plot_correlation_matrix(imp_df_non_flight_knn2, "KNN-2 Correlation Matrix (Top 50x50)")
-fig.show()
+plot_correlation_matrix(imp_df_non_flight_knn2, "KNN-2 Correlation Matrix (Top 50x50)")
 
 ```
 
 ### Full Data
 ```{python}
+#| label: KNN Grid Search Full Data
+#| echo: false
+
 if os.path.exists('full_df_knn2.csv'):
-  full_df_knn2 = pd.read_csv('full_df_knn2.csv')
+    full_df_knn2 = pd.read_csv('full_df_knn2.csv')
 else:
-  ss = StandardScaler()
-  imp_knn2 = KNNImputer(n_neighbors=5, weights='distance',)
-  knn_impute_pipe = Pipeline([('scaler', ss), ('knn', imp_knn2)])
+    # Ordinal-encode Group: F=0, GC=1, CC1=2, CC2=3, Viv=4
+    group_ordinal_map = {'F': 0, 'GC': 1, 'CC1': 2, 'CC2': 3, 'Viv': 4}
+    group_ordinal = ordered_df['Group'].map(group_ordinal_map).values.reshape(-1, 1)
+    unmapped = ordered_df['Group'][pd.isna(ordered_df['Group'].map(group_ordinal_map))].unique()
+    if len(unmapped):
+        raise ValueError(f"Unmapped Group values: {unmapped}")
 
-  full_df_knn2 = knn_impute_pipe.fit_transform(full_df.drop(columns=['Source Name', 'Group']))
-  full_df_knn2 = knn_impute_pipe.named_steps['scaler'].inverse_transform(full_df_knn2)
+    feature_cols = [c for c in ordered_df.columns if c not in ['Source Name', 'Group']]
+    X = np.hstack([ordered_df[feature_cols].values.astype(float), group_ordinal])
+    col_names = feature_cols + ['Group_ordinal']
 
-  full_df_knn2 = pd.DataFrame(full_df_knn2, columns=full_df.drop(columns=['Source Name', 'Group']).columns.to_list())
+    # ── Grid search via masked-value recovery ──────────────────────────────────
+    rng = np.random.default_rng(42)
+    known_mask = ~np.isnan(X)
+    test_mask  = known_mask & (rng.random(X.shape) < 0.05)   # hold out ~10 % of known values
 
-  full_df_knn2['Source Name'] = full_df['Source Name']
-  full_df_knn2['Group'] = full_df['Group']
-  full_df_knn2.to_csv('full_df_knn2.csv', index=False)
-  joblib.dump(knn_impute_pipe, 'knn2_impute_full_df_pipeline.joblib')
-fig = plot_correlation_matrix(full_df_knn2, "KNN-2 Correlation Matrix (Top 50x50)")
-fig.show()
+    X_masked = X.copy()
+    original_values = X[test_mask]
+    X_masked[test_mask] = np.nan
+
+    # Scale using nanmean/nanstd so NaNs are handled correctly
+    col_means_gs = np.nanmean(X_masked, axis=0)
+    col_stds_gs  = np.nanstd(X_masked,  axis=0)
+    col_stds_gs[col_stds_gs == 0] = 1
+    X_scaled_gs = (X_masked - col_means_gs) / col_stds_gs
+
+    param_grid = list(itertools.product([2, 3, 5, 7, 10], ['uniform', 'distance']))
+    gs_results = []
+
+    for n_neighbors, weights in param_grid:
+        imp = KNNImputer(n_neighbors=n_neighbors, weights=weights)
+        X_imp     = imp.fit_transform(X_scaled_gs)
+        X_imp_inv = X_imp * col_stds_gs + col_means_gs
+        rmse = np.sqrt(np.mean((X_imp_inv[test_mask] - original_values) ** 2))
+        gs_results.append({'n_neighbors': n_neighbors, 'weights': weights, 'rmse': rmse})
+
+    gs_df = pd.DataFrame(gs_results).sort_values('rmse').reset_index(drop=True)
+    print("Grid search results (sorted by RMSE):")
+    display(gs_df)
+
+    # Plot grid search results
+    fig_gs, ax_gs = plt.subplots(figsize=(8, 4), dpi=600)
+    for w in ['uniform', 'distance']:
+        sub = gs_df[gs_df['weights'] == w].sort_values('n_neighbors')
+        ax_gs.plot(sub['n_neighbors'], sub['rmse'], marker='o', label=w)
+    ax_gs.set_xlabel('n_neighbors', fontsize=12)
+    ax_gs.set_ylabel('RMSE (masked recovery)', fontsize=12)
+    ax_gs.set_title('KNN Grid Search – Full Data', fontsize=13, fontweight='bold')
+    ax_gs.legend(title='weights')
+    ax_gs.spines['top'].set_visible(False)
+    ax_gs.spines['right'].set_visible(False)
+    plt.tight_layout()
+    plt.savefig('knn_grid_search_full_df.png', dpi=600, bbox_inches='tight')
+    plt.show()
+
+    best_row    = gs_df.iloc[0]
+    best_params = {'n_neighbors': int(best_row['n_neighbors']), 'weights': best_row['weights']}
+    print(f"\nBest params: {best_params}  →  RMSE = {best_row['rmse']:.4f}")
+
+    # ── Final imputation with best params ─────────────────────────────────────
+    col_means_f = np.nanmean(X, axis=0)
+    col_stds_f  = np.nanstd(X,  axis=0)
+    col_stds_f[col_stds_f == 0] = 1
+    X_scaled_f = (X - col_means_f) / col_stds_f
+
+    imp_best = KNNImputer(**best_params)
+    X_imp_f     = imp_best.fit_transform(X_scaled_f)
+    X_imp_inv_f = X_imp_f * col_stds_f + col_means_f
+
+    full_df_knn2 = pd.DataFrame(X_imp_inv_f, columns=col_names)
+    full_df_knn2['Source Name'] = ordered_df['Source Name'].values
+    full_df_knn2['Group']       = ordered_df['Group'].values
+    full_df_knn2.to_csv('full_df_knn2.csv', index=False)
+    joblib.dump(
+        {'params': best_params, 'col_means': col_means_f,
+         'col_stds': col_stds_f, 'col_names': col_names},
+        'knn2_impute_full_df_pipeline.joblib'
+    )
+
+plot_correlation_matrix(full_df_knn2, "KNN Correlation Matrix (Top 50x50)", save_path="full_df_knn2.png")
 ```
 
 ## Random Sample Imputer
@@ -227,8 +353,7 @@ else:
   rsi_df_flight.to_csv('flight_imputed_rsi.csv', index=False)
   joblib.dump(rsi_impute_pipe, 'rsi_impute_flight_pipeline.joblib')
 
-fig = plot_correlation_matrix(rsi_df_flight, "RSI Correlation Matrix (Top 50x50)")
-fig.show()
+plot_correlation_matrix(rsi_df_flight, "RSI Correlation Matrix (Top 50x50)")
 ```
 
 
@@ -255,32 +380,39 @@ else:
   rsi_df_non_flight.to_csv('non_flight_imputed_rsi.csv', index=False)
   joblib.dump(rsi_impute_pipe, 'rsi_impute_non_flight_pipeline.joblib')
 
-fig = plot_correlation_matrix(rsi_df_non_flight, "RSI Correlation Matrix (Top 50x50)")
-fig.show()
+plot_correlation_matrix(rsi_df_non_flight, "RSI Correlation Matrix (Top 50x50)")
 
 
 ```
 
 ### Full Data
 ```{python}
+#| label: RSI Grid Search Full Data
+#| echo: false
+
 if os.path.exists('full_df_rsi.csv'):
-  rsi_df_non_flight = pd.read_csv('full_df_rsi.csv')
+    rsi_df_full = pd.read_csv('full_df_rsi.csv')
 else:
-  ss = StandardScaler()
-  rsi = RandomSampleImputer()
-  rsi_impute_pipe = Pipeline([('scaler', ss), ('rsi', rsi)])
-  rsi_full_df = rsi_impute_pipe.fit_transform(full_df.drop(columns=['Source Name', 'Group']))
-  rsi_full_df = rsi_impute_pipe.named_steps['scaler'].inverse_transform(rsi_full_df)
+    # Ordinal-encode Group: F=0, GC=1, CC1=2, CC2=3, Viv=4
+    group_ordinal_map = {'F': 0, 'GC': 1, 'CC1': 2, 'CC2': 3, 'Viv': 4}
+    group_ordinal = ordered_df['Group'].map(group_ordinal_map).values.reshape(-1, 1)
+    unmapped = ordered_df['Group'][pd.isna(ordered_df['Group'].map(group_ordinal_map))].unique()
+    if len(unmapped):
+        raise ValueError(f"Unmapped Group values: {unmapped}")
 
-  rsi_full_df = pd.DataFrame(rsi_full_df, columns=full_df.drop(columns=['Source Name', 'Group']).columns.to_list())
-  rsi_full_df['Source Name'] = full_df['Source Name']
-  rsi_full_df['Group'] = full_df['Group']
+    feature_cols = [c for c in ordered_df.columns if c not in ['Source Name', 'Group']]
+    X = np.hstack([ordered_df[feature_cols].values.astype(float), group_ordinal])
+    col_names = feature_cols + ['Group_ordinal']
+    X_df = pd.DataFrame(X, columns=col_names)
 
-  rsi_full_df.to_csv('full_df_rsi.csv', index=False)
-  joblib.dump(rsi_impute_pipe, 'full_df_rsi.joblib')
+    rsi = RandomSampleImputer(random_state=42)
+    rsi_df_full = rsi.fit_transform(X_df)
+    rsi_df_full['Source Name'] = ordered_df['Source Name'].values
+    rsi_df_full['Group']       = ordered_df['Group'].values
+    rsi_df_full.to_csv('full_df_rsi.csv', index=False)
+    joblib.dump(rsi, 'full_df_rsi.joblib')
 
-fig = plot_correlation_matrix(rsi_df_non_flight, "RSI Correlation Matrix (Top 50x50)")
-fig.show()
+plot_correlation_matrix(rsi_df_full, "RSI Correlation Matrix (Top 50x50)", save_path="full_df_rsi.png")
 ```
 
 ## Multiple Imputation by Chained Equation
@@ -328,8 +460,7 @@ else:
   df_bag_imputed_flight_br.to_csv('flight_imputed_mice_bagger.csv', index=False)
   joblib.dump(itera_impute_pipe, 'itera_impute_flight_pipeline.joblib')
 
-fig = plot_correlation_matrix(df_bag_imputed_flight_br, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
-fig.show()
+plot_correlation_matrix(df_bag_imputed_flight_br, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
 ``` 
 
 **Non-Flight Data**
@@ -352,8 +483,7 @@ else:
   df_bag_imputed_non_flight_br.to_csv('non_flight_imputed_mice_bagger.csv', index=False)
   joblib.dump(itera_impute_pipe, 'itera_impute_non_flight_pipeline.joblib')
 
-fig = plot_correlation_matrix(df_bag_imputed_non_flight_br, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
-fig.show()
+plot_correlation_matrix(df_bag_imputed_non_flight_br, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
 ```
 
 **Full Data**
@@ -361,54 +491,640 @@ fig.show()
 ```{python}
 #| label: MICE Bagging Regressor Full Data
 #| echo: false
-#| cache: true
 
-if os.path.exists('full_imputed_mice_bagger_with_group.csv'):
-  df_imputed = pd.read_csv('non_flight_imputed_mice_bagger.csv')
+import time
+
+def _log(msg, t0=None):
+    ts = time.strftime('%H:%M:%S')
+    elapsed = f"  (+{time.time()-t0:.1f}s)" if t0 is not None else ""
+    print(f"[{ts}]{elapsed}  {msg}")
+
+if os.path.exists('full_df_mice_bayesridge.csv'):
+    _log("Cache hit — loading full_df_mice_bayesridge.csv")
+    df_imputed = pd.read_csv('full_df_mice_bayesridge.csv')
+    _log(f"Loaded: {df_imputed.shape[0]} rows × {df_imputed.shape[1]} cols")
 else:
-  # Identify columns
-  features = [col for col in ordered_df.columns if col not in ['Source Name', 'Group']]
-  group_col = 'Group'
+    t_total = time.time()
 
-  # Prepare column transformer: scale features, encode group
-  col_transformer = ColumnTransformer([
-      ('features', StandardScaler(), features),
-      ('group', OneHotEncoder(sparse_output=False, handle_unknown='ignore'), [group_col])
-  ])
+    # ── 1. Ordinal-encode Group: F=0, GC=1, CC1=2, CC2=3, Viv=4 ──────────────
+    _log("Step 1/5  Ordinal-encoding Group column (F=0, GC=1, CC1=2, CC2=3, Viv=4)")
+    group_ordinal_map = {'F': 0, 'GC': 1, 'CC1': 2, 'CC2': 3, 'Viv': 4}
+    group_ordinal = ordered_df['Group'].map(group_ordinal_map).values.reshape(-1, 1)
+    unmapped = ordered_df['Group'][pd.isna(ordered_df['Group'].map(group_ordinal_map))].unique()
+    if len(unmapped):
+        raise ValueError(f"Unmapped Group values: {unmapped}")
+    for label, code in sorted(group_ordinal_map.items(), key=lambda x: x[1]):
+        n = int((ordered_df['Group'] == label).sum())
+        _log(f"          {label}={code}  →  {n} samples")
 
-  # Combine in a pipeline
-  bagger = BaggingRegressor(random_state=2, n_jobs=-1, warm_start=True, verbose=1)
-  itera_bagger = IterativeImputer(
-      random_state=2, initial_strategy='median', estimator=bagger,
-      max_iter=10, tol=0.01, imputation_order='roman', skip_complete=True, verbose=2
-  )
+    feature_cols = [c for c in ordered_df.columns if c not in ['Source Name', 'Group']]
+    X = np.hstack([ordered_df[feature_cols].values.astype(float), group_ordinal])
+    col_names = feature_cols + ['Group_ordinal']
+    n_rows, n_cols = X.shape
+    n_missing = int(np.isnan(X).sum())
+    _log(f"          Matrix: {n_rows} rows × {n_cols} cols  |  missing values: {n_missing} ({100*n_missing/(n_rows*n_cols):.1f}%)")
 
-  impute_pipeline = Pipeline([
-      ('prep', col_transformer),
-      ('imputer', itera_bagger)
-  ])
+    # ── 2. Prepare masked hold-out set ────────────────────────────────────────
+    _log("Step 2/5  Creating masked hold-out set (10% of known values)")
+    rng = np.random.default_rng(42)
+    known_mask = ~np.isnan(X)
+    test_mask  = known_mask & (rng.random(X.shape) < 0.10)
+    _log(f"          Hold-out size: {int(test_mask.sum())} values")
 
-  # Fit only on data that should be imputed (exclude Source Name)
-  X = ordered_df.drop(columns=['Source Name'])
+    X_masked = X.copy()
+    original_values = X[test_mask]
+    X_masked[test_mask] = np.nan
 
-  impute_pipeline.fit(X)
-  imputed_arr = impute_pipeline.transform(X)
+    col_means_gs = np.nanmean(X_masked, axis=0)
+    col_stds_gs  = np.nanstd(X_masked,  axis=0)
+    col_stds_gs[col_stds_gs == 0] = 1
+    X_scaled_gs = (X_masked - col_means_gs) / col_stds_gs
 
-  # Recover column names (features + encoded group labels)
-  encoded_group_names = impute_pipeline.named_steps['prep'].transformers_[1][1].get_feature_names_out([group_col])
-  output_columns = features + list(encoded_group_names)
+    # ── 3. Grid search ────────────────────────────────────────────────────────
+    # Findings from prior 20-fit run:
+    #   • n_nearest=5 was the clear winner — lock it in
+    #   • max_iter=5 beat max_iter=3 significantly — push higher
+    #   • heavy-tailed biological data → test robust estimators alongside Ridge
+    from sklearn.linear_model import Ridge, HuberRegressor, ElasticNet, ARDRegression
 
-  # Build DataFrame and add back Source Name
-  df_imputed = pd.DataFrame(imputed_arr, columns=output_columns, index=full_df.index)
-  df_imputed['Source Name'] = full_df['Source Name']
 
-  # Optionally, if you want to recover the original "Group" label, merge it back
-  df_imputed[group_col] = full_df[group_col].values  # original categorical labels
+    ESTIMATORS = {
+        # 'ridge':      Ridge(),
+        'elasticnet': ElasticNet(alpha=0.1, l1_ratio=0.5, max_iter=500),
+        'ard':        ARDRegression(),
+        'huber':      HuberRegressor(epsilon=1.35, max_iter=300),
+        
+    }
 
-  # Save result and pipeline as before
-  df_imputed.to_csv('full_imputed_mice_bagger_with_group.csv', index=False)
-  joblib.dump(impute_pipeline, 'itera_impute_full_pipeline_with_group.joblib')
-fig = plot_correlation_matrix(df_imputed, "MICE Baggigng Regressor Correlation Matrix (Top 50x50)")
-fig.show()
+    # 4 estimators × 5 n_nearest × 3 max_iter = 60 fits
+    # initial_strategy fixed to 'mean' — washes out with enough iterations
+    # max_iter starts at 5 (3 showed ConvergenceWarning on all combos)
+    param_grid = list(itertools.product(
+        ESTIMATORS.keys(),    # estimator
+        [2, 3, 5, 7, 10],    # n_nearest_features
+        [3, 5, 7, 10],           # max_iter
+    ))
+    FIXED_STRATEGY = 'mean'
+    _log(f"Step 3/5  Grid search — {len(param_grid)} combinations "
+         f"(3 estimators × 5 n_nearest × 3 max_iter  |  strategy='{FIXED_STRATEGY}' fixed)")
+    gs_results = []
+
+    for i, (est_name, n_nearest, max_iter) in enumerate(param_grid, 1):
+        t_combo = time.time()
+        _log(f"          [{i}/{len(param_grid)}] "
+             f"estimator={est_name!r}, n_nearest={n_nearest}, max_iter={max_iter} — fitting …")
+        itera = IterativeImputer(
+            random_state=2, initial_strategy=FIXED_STRATEGY,
+            estimator=ESTIMATORS[est_name],
+            n_nearest_features=n_nearest,
+            max_iter=max_iter, tol=0.01, imputation_order='roman', skip_complete=True
+        )
+        X_imp     = itera.fit_transform(X_scaled_gs)
+        X_imp_inv = X_imp * col_stds_gs + col_means_gs
+        rmse = np.sqrt(np.mean((X_imp_inv[test_mask] - original_values) ** 2))
+        gs_results.append({'estimator': est_name, 'n_nearest': n_nearest,
+                           'max_iter': max_iter, 'rmse': rmse})
+        _log(f"          [{i}/{len(param_grid)}] done — RMSE={rmse:.4f}", t_combo)
+
+    gs_df = pd.DataFrame(gs_results).sort_values('rmse').reset_index(drop=True)
+    _log("Step 3/5  Grid search complete — results (sorted by RMSE):")
+    display(gs_df)
+
+    # Plot: one subplot per estimator, x=n_nearest, lines=max_iter
+    est_names   = list(ESTIMATORS.keys())
+    max_iters   = [5, 7, 10]
+    line_colors = {5: '#4C72B0', 7: '#DD8452', 10: '#55A868'}
+
+    fig_gs, axes = plt.subplots(1, len(est_names), figsize=(14, 4), dpi=150, sharey=True)
+    for ax, est_name in zip(axes, est_names):
+        sub_e = gs_df[gs_df['estimator'] == est_name]
+        for mi, color in line_colors.items():
+            s = sub_e[sub_e['max_iter'] == mi].sort_values('n_nearest')
+            ax.plot(s['n_nearest'], s['rmse'], marker='o', color=color, label=f"iter={mi}")
+        ax.set_title(est_name, fontsize=11, fontweight='bold')
+        ax.set_xlabel('n_nearest_features', fontsize=10)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+    axes[0].set_ylabel('RMSE (masked recovery)', fontsize=10)
+    axes[-1].legend(title='max_iter', fontsize=8, bbox_to_anchor=(1.02, 1), loc='upper left')
+    fig_gs.suptitle(f"MICE Grid Search – Full Data  (strategy='{FIXED_STRATEGY}')",
+                    fontsize=13, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig('mice_grid_search_full_df.png', dpi=150, bbox_inches='tight')
+    plt.show()
+
+    best_row       = gs_df.iloc[0]
+    best_est_name  = best_row['estimator']
+    best_n_nearest = int(best_row['n_nearest'])
+    best_params    = {'initial_strategy': FIXED_STRATEGY,
+                      'max_iter':         int(best_row['max_iter'])}
+    _log(f"          Best: estimator={best_est_name!r}, n_nearest={best_n_nearest}, "
+         f"max_iter={best_params['max_iter']}  →  RMSE={best_row['rmse']:.4f}")
+
+    # ── 4 & 5 moved to "Parameter Search on Best Estimator" cell ─────────────
+    # Final imputation runs there using the Stage-2 tuned estimator.
+
+plot_correlation_matrix(df_imputed, "MICE  Correlation Matrix (Top 50x50)", save_path="full_df_mice_ridge.png")
 
 ```
+
+## Parameter Search on Best Estimator
+
+```{python}
+#| label: Parameter Search on Best Estimator (ARD)
+#| echo: false
+
+"""
+ARD Hyperparameter Tuning for MICE Imputation
+==============================================
+Focused grid search on ARD and ElasticNet estimators
+based on findings from initial broad grid search.
+
+Key finding from initial search:
+- ARD with n_nearest=7, max_iter=5 → RMSE=53.41 (best so far)
+- ElasticNet with n_nearest=7, max_iter=10 → RMSE=57.50
+- Huber fails to converge on this dataset — excluded
+- RMSE is non-monotonic with max_iter — overfitting occurs at high iterations
+"""
+
+import os
+import time
+import itertools
+import numpy as np
+import pandas as pd
+import joblib
+import matplotlib.pyplot as plt
+
+from sklearn.experimental import enable_iterative_imputer  # noqa
+from sklearn.impute import IterativeImputer
+from sklearn.linear_model import ARDRegression, ElasticNet
+
+# ── Logging helper ────────────────────────────────────────────────────────────
+def _log(msg, t0=None):
+    ts = time.strftime('%H:%M:%S')
+    elapsed = f"  (+{time.time()-t0:.1f}s)" if t0 is not None else ""
+    print(f"[{ts}]{elapsed}  {msg}")
+
+# ── Load ordered dataset ──────────────────────────────────────────────────────
+# Replace with your actual ordered_df loading code
+# ordered_df = pd.read_csv('ordered_df.csv')
+
+# ── Step 1: Ordinal-encode Group ──────────────────────────────────────────────
+_log("Step 1/5  Ordinal-encoding Group column (F=0, GC=1, CC1=2, CC2=3, Viv=4)")
+group_ordinal_map = {'F': 0, 'GC': 1, 'CC1': 2, 'CC2': 3, 'Viv': 4}
+group_ordinal = ordered_df['Group'].map(group_ordinal_map).values.reshape(-1, 1)
+
+feature_cols = [c for c in ordered_df.columns if c not in ['Source Name', 'Group']]
+X = np.hstack([ordered_df[feature_cols].values.astype(float), group_ordinal])
+col_names = feature_cols + ['Group_ordinal']
+n_rows, n_cols = X.shape
+n_missing = int(np.isnan(X).sum())
+_log(f"          Matrix: {n_rows} rows × {n_cols} cols  |  "
+     f"missing: {n_missing} ({100*n_missing/(n_rows*n_cols):.1f}%)")
+
+# ── Step 2: Masked hold-out set ───────────────────────────────────────────────
+_log("Step 2/5  Creating masked hold-out set (10% of known values)")
+rng = np.random.default_rng(42)
+known_mask = ~np.isnan(X)
+test_mask  = known_mask & (rng.random(X.shape) < 0.10)
+_log(f"          Hold-out size: {int(test_mask.sum())} values")
+
+X_masked = X.copy()
+original_values = X[test_mask]
+X_masked[test_mask] = np.nan
+
+col_means_gs = np.nanmean(X_masked, axis=0)
+col_stds_gs  = np.nanstd(X_masked,  axis=0)
+col_stds_gs[col_stds_gs == 0] = 1
+X_scaled_gs = (X_masked - col_means_gs) / col_stds_gs
+
+# ── Step 3: Focused grid search ───────────────────────────────────────────────
+# Based on initial search findings:
+# - n_nearest=5 and n_nearest=7 are the sweet spot
+# - max_iter=3-10 is the relevant range
+# - Adding max_iter=15 to test if improvement continues beyond 10
+# - ARD hyperparameters: alpha_1, alpha_2 control sparsity
+# - ElasticNet hyperparameters: alpha, l1_ratio control regularization
+
+ESTIMATORS = {
+    # ARD variants — testing different sparsity levels
+    'ard_default':    ARDRegression(),
+    'ard_sparse':     ARDRegression(alpha_1=1m0 -4, alpha_2=1e-4,
+                                    lambda_1=1e-4, lambda_2=1e-4),
+    'ard_dense':      ARDRegression(alpha_1=1e-6, alpha_2=1e-6,
+                                    lambda_1=1e-6, lambda_2=1e-6),
+    # ElasticNet variants — testing different regularization strengths
+    'elasticnet_default': ElasticNet(alpha=0.1, l1_ratio=0.5, max_iter=500),
+    'elasticnet_l1':      ElasticNet(alpha=0.1, l1_ratio=0.9, max_iter=500),
+    'elasticnet_l2':      ElasticNet(alpha=0.1, l1_ratio=0.1, max_iter=500),
+    'elasticnet_weak':    ElasticNet(alpha=0.01, l1_ratio=0.5, max_iter=500),
+    'elasticnet_strong':  ElasticNet(alpha=1.0, l1_ratio=0.5, max_iter=500),
+}
+
+N_NEAREST_OPTIONS = [5, 7]
+MAX_ITER_OPTIONS  = [3, 5, 10, 15]
+
+param_grid = list(itertools.product(
+    ESTIMATORS.keys(),
+    N_NEAREST_OPTIONS,
+    MAX_ITER_OPTIONS,
+))
+
+n_total = len(param_grid)
+_log(f"Step 3/5  Focused grid search — {n_total} combinations "
+     f"({len(ESTIMATORS)} estimators × "
+     f"{len(N_NEAREST_OPTIONS)} n_nearest × "
+     f"{len(MAX_ITER_OPTIONS)} max_iter)")
+
+gs_results = []
+t_search = time.time()
+
+for i, (est_name, n_nearest, max_iter) in enumerate(param_grid, 1):
+    t_combo = time.time()
+    _log(f"          [{i}/{n_total}] "
+         f"estimator={est_name!r}, n_nearest={n_nearest}, "
+         f"max_iter={max_iter} — fitting …")
+
+    itera = IterativeImputer(
+        random_state=42,
+        initial_strategy='mean',
+        estimator=ESTIMATORS[est_name],
+        n_nearest_features=n_nearest,
+        max_iter=max_iter,
+        tol=0.01,
+        imputation_order='roman',
+        skip_complete=True,
+    )
+    X_imp     = itera.fit_transform(X_scaled_gs)
+    X_imp_inv = X_imp * col_stds_gs + col_means_gs
+    rmse = np.sqrt(np.mean((X_imp_inv[test_mask] - original_values) ** 2))
+
+    gs_results.append({
+        'estimator':  est_name,
+        'n_nearest':  n_nearest,
+        'max_iter':   max_iter,
+        'rmse':       rmse,
+    })
+    _log(f"          [{i}/{n_total}] done — RMSE={rmse:.4f}", t_combo)
+
+_log(f"Step 3/5  Grid search complete — total elapsed: "
+     f"{time.time()-t_search:.1f}s")
+
+# ── Step 4: Results summary ───────────────────────────────────────────────────
+gs_df = pd.DataFrame(gs_results).sort_values('rmse').reset_index(drop=True)
+print("\nTop 10 configurations:")
+print(gs_df.head(10).to_string(index=False))
+gs_df.to_csv('ard_elasticnet_grid_search_results.csv', index=False)
+
+# ── Step 5: Plot results ──────────────────────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), dpi=150)
+
+# Plot ARD variants
+ard_names = [k for k in ESTIMATORS.keys() if 'ard' in k]
+for est_name in ard_names:
+    for n_nearest in N_NEAREST_OPTIONS:
+        sub = gs_df[
+            (gs_df['estimator'] == est_name) &
+            (gs_df['n_nearest'] == n_nearest)
+        ].sort_values('max_iter')
+        axes[0].plot(
+            sub['max_iter'], sub['rmse'],
+            marker='o',
+            label=f'{est_name} (n={n_nearest})'
+        )
+axes[0].set_title('ARD Variants', fontsize=12, fontweight='bold')
+axes[0].set_xlabel('max_iter', fontsize=10)
+axes[0].set_ylabel('RMSE (masked recovery)', fontsize=10)
+axes[0].legend(fontsize=7, bbox_to_anchor=(1.02, 1), loc='upper left')
+axes[0].spines['top'].set_visible(False)
+axes[0].spines['right'].set_visible(False)
+
+# Add reference line for KNN RMSE
+axes[0].axhline(y=11.20, color='red', linestyle='--', lw=1.5,
+                label='KNN baseline (11.20)')
+
+# Plot ElasticNet variants
+en_names = [k for k in ESTIMATORS.keys() if 'elasticnet' in k]
+for est_name in en_names:
+    for n_nearest in N_NEAREST_OPTIONS:
+        sub = gs_df[
+            (gs_df['estimator'] == est_name) &
+            (gs_df['n_nearest'] == n_nearest)
+        ].sort_values('max_iter')
+        axes[1].plot(
+            sub['max_iter'], sub['rmse'],
+            marker='o',
+            label=f'{est_name} (n={n_nearest})'
+        )
+axes[1].set_title('ElasticNet Variants', fontsize=12, fontweight='bold')
+axes[1].set_xlabel('max_iter', fontsize=10)
+axes[1].set_ylabel('RMSE (masked recovery)', fontsize=10)
+axes[1].legend(fontsize=7, bbox_to_anchor=(1.02, 1), loc='upper left')
+axes[1].spines['top'].set_visible(False)
+axes[1].spines['right'].set_visible(False)
+axes[1].axhline(y=11.20, color='red', linestyle='--', lw=1.5,
+                label='KNN baseline (11.20)')
+
+fig.suptitle('MICE Focused Grid Search — ARD vs ElasticNet\n'
+             'Red dashed line = KNN baseline RMSE (11.20)',
+             fontsize=13, fontweight='bold')
+plt.tight_layout()
+plt.savefig('ard_elasticnet_grid_search.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+# ── Step 6: Final imputation with best params ─────────────────────────────────
+best_row      = gs_df.iloc[0]
+best_est_name = best_row['estimator']
+best_n_nearest = int(best_row['n_nearest'])
+best_max_iter  = int(best_row['max_iter'])
+
+_log(f"\nStep 4/5  Final imputation — "
+     f"estimator={best_est_name!r}, "
+     f"n_nearest={best_n_nearest}, "
+     f"max_iter={best_max_iter}, "
+     f"RMSE={best_row['rmse']:.4f}")
+
+t_final = time.time()
+col_means_f = np.nanmean(X, axis=0)
+col_stds_f  = np.nanstd(X,  axis=0)
+col_stds_f[col_stds_f == 0] = 1
+X_scaled_f = (X - col_means_f) / col_stds_f
+
+itera_best = IterativeImputer(
+    random_state=42,
+    initial_strategy='mean',
+    estimator=ESTIMATORS[best_est_name],
+    n_nearest_features=best_n_nearest,
+    max_iter=best_max_iter,
+    tol=0.01,
+    imputation_order='roman',
+    skip_complete=True,
+)
+X_imp_f     = itera_best.fit_transform(X_scaled_f)
+X_imp_inv_f = X_imp_f * col_stds_f + col_means_f
+_log(f"          Imputation complete", t_final)
+
+# ── Step 7: Save ──────────────────────────────────────────────────────────────
+_log("Step 5/5  Saving outputs")
+df_imputed_mice = pd.DataFrame(X_imp_inv_f, columns=col_names)
+df_imputed_mice['Source Name'] = ordered_df['Source Name'].values
+df_imputed_mice['Group']       = ordered_df['Group'].values
+df_imputed_mice.to_csv('full_df_mice_ard.csv', index=False)
+
+joblib.dump(
+    {
+        'estimator':          best_est_name,
+        'estimator_object':   ESTIMATORS[best_est_name],
+        'n_nearest_features': best_n_nearest,
+        'max_iter':           best_max_iter,
+        'col_means':          col_means_f,
+        'col_stds':           col_stds_f,
+        'col_names':          col_names,
+        'grid_search_results': gs_df.to_dict(),
+    },
+    'mice_ard_pipeline.joblib'
+)
+_log(f"          Saved: full_df_mice_ard.csv + mice_ard_pipeline.joblib")
+_log(f"          Best config: {best_est_name}, "
+     f"n_nearest={best_n_nearest}, max_iter={best_max_iter}, "
+     f"RMSE={best_row['rmse']:.4f}")
+# %%
+plot_correlation_matrix(df_imputed_mice, "MICE  Correlation Matrix (Top 50x50)", save_path="full_df_mice_elasticnet_weak.png")
+```
+
+## Hybrid Imputation
+
+```{python}
+#| label: Hybrid Imputation
+#| echo: false
+
+import time
+
+def _hlog(msg, t0=None):
+    elapsed = f"  (+{time.time()-t0:.1f}s)" if t0 is not None else ""
+    print(f"[{time.strftime('%H:%M:%S')}]{elapsed}  {msg}")
+
+# ┌─ PIPELINE JOBLLIBS ─────────────────────────────────────────────────────────┐
+# │ Each entry: name → (joblib path, full-data fill CSV path)                   │
+# │ Joblib is used to reconstruct the imputer for honest masked RMSE evaluation. │
+# │ Fill CSV provides the actual imputed values at missing positions.            │
+PIPELINES = {
+    'knn':          ('knn2_impute_full_df_pipeline.joblib',  'full_df_knn2.csv'),
+    'mice_elastic': ('mice_ard_pipeline.joblib',             'full_df_mice_elastic_weak.csv'),
+}
+FALLBACK_METHOD = 'mice_elastic'   # for columns with no hold-out values
+# └─────────────────────────────────────────────────────────────────────────────┘
+
+CATEGORY_FILES = {
+    'rnaseq':    'rnaseq_columns.csv',
+    'protein':   'protein_columns.csv',
+    'microct':   'microct_columns.csv',
+    'hne':       'hne_columns.csv',
+    'tunel':     'tunel_columns.csv',
+    'pna':       'pna_columns.csv',
+    'zo1':       'zo1_columns.csv',
+    'tonometry': 'tonometry_columns.csv',
+}
+
+if os.path.exists('full_df_hybrid.csv'):
+    _hlog("Cache hit — loading full_df_hybrid.csv")
+    hybrid_df = pd.read_csv('full_df_hybrid.csv')
+    sel_df    = pd.read_csv('full_df_hybrid_selection.csv')
+    _hlog(f"Loaded: {hybrid_df.shape[0]} rows × {hybrid_df.shape[1]} cols")
+else:
+    t_total = time.time()
+
+    # ── 1. Load pipelines + full-data fill CSVs ───────────────────────────────
+    _hlog("Step 1/5  Loading saved pipelines and fill CSVs")
+    pipes, fill_arrs = {}, {}
+    for name, (jpath, cpath) in PIPELINES.items():
+        for p in (jpath, cpath):
+            if not os.path.exists(p):
+                raise FileNotFoundError(f"Missing file for {name!r}: {p}")
+        pipes[name] = joblib.load(jpath)
+        _hlog(f"       {name!r}  ← {jpath}")
+
+    col_names_h = pipes['knn']['col_names']
+    for name, p in pipes.items():
+        if p['col_names'] != col_names_h:
+            raise ValueError(f"Column mismatch between pipelines at {name!r}")
+
+    for name, (_, cpath) in PIPELINES.items():
+        df_c = pd.read_csv(cpath)
+        missing = [c for c in col_names_h if c not in df_c.columns]
+        if missing:
+            raise KeyError(f"Fill CSV for {name!r} missing columns: {missing[:5]}")
+        fill_arrs[name] = df_c[col_names_h].values.astype(float)
+        _hlog(f"       {name!r} fill CSV  ← {cpath}  {fill_arrs[name].shape}")
+
+    if FALLBACK_METHOD not in pipes:
+        raise ValueError(f"FALLBACK_METHOD={FALLBACK_METHOD!r} not in PIPELINES: {list(pipes)}")
+
+    # ── 2. Original matrix + hold-out mask ────────────────────────────────────
+    # col_names_h may include 'Group_ordinal' (a computed column, not in ordered_df).
+    # Build it by selecting real columns first, then appending the ordinal encoding.
+    _hlog("Step 2/5  Building feature matrix and hold-out mask (seed=42, 10%)")
+    df_cols        = [c for c in col_names_h if c in ordered_df.columns]
+    X_feat         = ordered_df[df_cols].values.astype(float)
+    if 'Group_ordinal' in col_names_h:
+        _ord_map   = {'F': 0, 'GC': 1, 'CC1': 2, 'CC2': 3, 'Viv': 4}
+        _g_ord     = ordered_df['Group'].map(_ord_map).values.reshape(-1, 1)
+        X_orig     = np.hstack([X_feat, _g_ord])   # Group_ordinal is always last
+    else:
+        X_orig     = X_feat
+    n_rows_h, n_cols_h = X_orig.shape
+    n_miss_h       = int(np.isnan(X_orig).sum())
+    _hlog(f"       {n_rows_h} rows × {n_cols_h} cols  |  "
+          f"{n_miss_h} NaN ({100*n_miss_h/(n_rows_h*n_cols_h):.1f}%)")
+
+    rng_h       = np.random.default_rng(42)
+    known_h     = ~np.isnan(X_orig)
+    test_mask_h = known_h & (rng_h.random(X_orig.shape) < 0.10)
+    holdout_h   = {j: np.where(test_mask_h[:, j])[0]
+                   for j in range(n_cols_h) if test_mask_h[:, j].any()}
+    _hlog(f"       {len(holdout_h)} cols have hold-out values  "
+          f"({int(test_mask_h.sum())} total held-out values)")
+
+    X_masked_h          = X_orig.copy()
+    X_masked_h[test_mask_h] = np.nan
+    col_means_m         = np.nanmean(X_masked_h, axis=0)
+    col_stds_m          = np.nanstd(X_masked_h,  axis=0)
+    col_stds_m[col_stds_m == 0] = 1
+    X_scaled_m          = (X_masked_h - col_means_m) / col_stds_m
+
+    # ── 3. Re-run imputers on masked data → honest per-column RMSE ───────────
+    eval_arrs = {}
+    for name, p in pipes.items():
+        _hlog(f"Step 3/5  Re-running {name!r} on masked data …")
+        t_run = time.time()
+        if name == 'knn':
+            imp = KNNImputer(**p['params'])
+        else:
+            imp = IterativeImputer(
+                random_state=2,
+                estimator=p['estimator_object'],
+                n_nearest_features=p['n_nearest_features'],
+                max_iter=p['max_iter'],
+                tol=0.01, imputation_order='roman', skip_complete=True,
+            )
+        X_imp_z          = imp.fit_transform(X_scaled_m)
+        eval_arrs[name]  = X_imp_z * col_stds_m + col_means_m
+        _hlog(f"       done", t_run)
+
+    # ── 4. Per-column selection ───────────────────────────────────────────────
+    _hlog("Step 4/5  Per-column method selection")
+    cols_with_missing = [j for j in range(n_cols_h) if np.isnan(X_orig[:, j]).any()]
+    total_missing     = sum(int(np.isnan(X_orig[:, j]).sum()) for j in cols_with_missing)
+    _hlog(f"       {len(cols_with_missing)} columns with missing values  |  "
+          f"{total_missing} total NaN  ({100*total_missing/(n_rows_h*n_cols_h):.1f}% of matrix)")
+
+    selection_rows = []
+    X_hybrid       = X_orig.copy()
+
+    for j in cols_with_missing:
+        nan_rows = np.where(np.isnan(X_orig[:, j]))[0]
+        if j not in holdout_h:
+            chosen   = FALLBACK_METHOD
+            rmse_map = {m: np.nan for m in pipes}
+        else:
+            rows      = holdout_h[j]
+            true_vals = X_orig[rows, j]
+            col_std   = col_stds_m[j]
+            rmse_map  = {
+                name: float(np.sqrt(np.mean(((arr[rows, j] - true_vals) / col_std) ** 2)))
+                for name, arr in eval_arrs.items()
+            }
+            chosen = min(rmse_map, key=rmse_map.get)
+
+        X_hybrid[nan_rows, j] = fill_arrs[chosen][nan_rows, j]
+        selection_rows.append({'col': col_names_h[j], 'chosen': chosen,
+                                **{f'rmse_{m}': rmse_map[m] for m in pipes}})
+
+    sel_df = pd.DataFrame(selection_rows)
+    _hlog("       Method selection distribution:")
+    display(sel_df['chosen'].value_counts().rename('cols').to_frame())
+
+    # ── 5. Save ───────────────────────────────────────────────────────────────
+    _hlog("Step 5/5  Saving outputs")
+    hybrid_df = pd.DataFrame(X_hybrid, columns=col_names_h)
+    hybrid_df['Source Name'] = ordered_df['Source Name'].values
+    hybrid_df['Group']       = ordered_df['Group'].values
+    hybrid_df.to_csv('full_df_hybrid.csv', index=False)
+    sel_df.to_csv('full_df_hybrid_selection.csv', index=False)
+    joblib.dump({'pipelines': PIPELINES, 'fallback': FALLBACK_METHOD,
+                 'col_names': col_names_h, 'selection': sel_df.to_dict('records')},
+                'hybrid_imputer.joblib')
+    _hlog(f"       Saved  |  total elapsed: {time.time()-t_total:.1f}s")
+
+# ── Plots ─────────────────────────────────────────────────────────────────────
+m1, m2 = list(PIPELINES.keys())[:2]
+
+# ① Per-column RMSE scatter
+sub      = sel_df.dropna(subset=[f'rmse_{m1}', f'rmse_{m2}'])
+r1, r2   = sub[f'rmse_{m1}'].values, sub[f'rmse_{m2}'].values
+lim      = max(r1.max(), r2.max()) * 1.05
+colors_h = sub['chosen'].map({m1: '#4C72B0', m2: '#DD8452'}).fillna('#aaaaaa')
+
+fig_h, ax_h = plt.subplots(figsize=(6, 6), dpi=150)
+ax_h.scatter(r1, r2, c=colors_h, alpha=0.4, s=8, linewidths=0)
+ax_h.plot([0, lim], [0, lim], 'k--', lw=1, alpha=0.5)
+ax_h.set_xlim(0, lim); ax_h.set_ylim(0, lim)
+ax_h.set_xlabel(f'RMSE (z-score) — {m1}', fontsize=11)
+ax_h.set_ylabel(f'RMSE (z-score) — {m2}', fontsize=11)
+ax_h.set_title(f'Per-column RMSE: {m1} vs {m2}\n(blue={m1} wins, orange={m2} wins)', fontsize=11)
+ax_h.spines['top'].set_visible(False); ax_h.spines['right'].set_visible(False)
+plt.tight_layout()
+plt.savefig('hybrid_rmse_scatter.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+# ② RMSE delta histogram
+delta = r1 - r2
+fig_d, ax_d = plt.subplots(figsize=(7, 3), dpi=150)
+ax_d.hist(delta, bins=60, color='#55A868', edgecolor='none', alpha=0.8)
+ax_d.axvline(0, color='k', lw=1.2, ls='--')
+ax_d.set_xlabel(f'RMSE({m1}) − RMSE({m2})  (positive → {m2} better)', fontsize=10)
+ax_d.set_ylabel('Columns', fontsize=10)
+ax_d.set_title('RMSE difference distribution per column (z-score space)', fontsize=11)
+ax_d.spines['top'].set_visible(False); ax_d.spines['right'].set_visible(False)
+plt.tight_layout()
+plt.savefig('hybrid_rmse_delta.png', dpi=150, bbox_inches='tight')
+plt.show()
+
+# ③ Category breakdown
+col_to_cat = {}
+for cat, fpath in CATEGORY_FILES.items():
+    if os.path.exists(fpath):
+        for col in pd.read_csv(fpath, header=None).iloc[:, 0]:
+            col_to_cat[str(col)] = cat
+
+sel_df['category'] = sel_df['col'].map(col_to_cat).fillna('other')
+cat_counts = (sel_df.groupby(['category', 'chosen'])
+                     .size().unstack(fill_value=0)
+                     .sort_values(m1, ascending=False))
+cat_pct = cat_counts.div(cat_counts.sum(axis=1), axis=0) * 100
+
+fig_c, axes_c = plt.subplots(1, 2, figsize=(14, 5), dpi=150)
+cat_counts.plot(kind='bar', ax=axes_c[0], color=['#4C72B0', '#DD8452'],
+                edgecolor='none', width=0.7)
+axes_c[0].set_title('Columns won per feature category (count)', fontsize=12)
+axes_c[0].set_xlabel(''); axes_c[0].tick_params(axis='x', rotation=30)
+axes_c[0].spines['top'].set_visible(False); axes_c[0].spines['right'].set_visible(False)
+
+cat_pct.plot(kind='bar', ax=axes_c[1], color=['#4C72B0', '#DD8452'],
+             edgecolor='none', width=0.7)
+axes_c[1].set_title('Columns won per feature category (%)', fontsize=12)
+axes_c[1].set_ylabel('%'); axes_c[1].set_xlabel('')
+axes_c[1].tick_params(axis='x', rotation=30)
+axes_c[1].spines['top'].set_visible(False); axes_c[1].spines['right'].set_visible(False)
+
+plt.suptitle('Hybrid Imputation — Method Selection by Feature Category',
+             fontsize=13, fontweight='bold', y=1.01)
+plt.tight_layout()
+plt.savefig('hybrid_category_breakdown.png', dpi=150, bbox_inches='tight')
+plt.show()
+display(cat_counts)
+
+plot_correlation_matrix(hybrid_df, "Hybrid Imputation Correlation Matrix (Top 50x50)",
+                        save_path="full_df_hybrid.png")
+```
+

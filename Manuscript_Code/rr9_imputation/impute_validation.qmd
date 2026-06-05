@@ -1,0 +1,336 @@
+---
+title: 'RR9 Dataset Imputation Validation'
+author: 'Lauren Sanders, Jian Gong, Vaishnavi Nagesh'
+format:
+    html:
+        toc: true
+        toc-depth: 5
+        code-fold: true
+        page-layout: full
+        code-overflow: wrap 
+        anchor-sections: true
+        max-width: 1000px
+---
+
+## Overview
+
+This notebook validates the effectiveness of imputation methods by comparing
+performance of downstream analyses on the original and imputed datasets.
+All validation analyses are performed on RNA-seq features only, subsetted
+to intersecting numeric columns across all datasets. Four imputation methods
+are compared: KNN, Random Sample Imputer (RSI), MICE with BaggingRegressor,
+and the Cascading Hybrid strategy.
+
+```{python}
+#| label: Import libraries
+#| echo: false
+#| cache: true
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import seaborn as sns
+import scipy.stats as stats
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
+
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler, label_binarize
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.metrics import (classification_report, accuracy_score,
+                             roc_curve, auc, adjusted_rand_score)
+from sklearn.cluster import KMeans
+from scipy.stats import ks_2samp
+```
+
+```{python}
+#| label: Load datasets
+#| echo: false
+#| cache: true
+
+# Load original full dataset and column lists
+rr9_all_df         = pd.read_csv('full_df.csv')
+rnaseq_columns     = pd.read_csv('rnaseq_columns.csv', header=None)[0].tolist()
+
+# Load imputed datasets (full multimodal, with Group column)
+knn_imputed_df     = pd.read_csv('full_df_knn2.csv')
+rsi_imputed_df     = pd.read_csv('full_df_rsi.csv')
+mice_bag_imputed_df = pd.read_csv('full_imputed_mice_bagger_with_group.csv')
+# hybrid_imputed_df  = pd.read_csv('full_df_hybrid.csv')
+
+# ── Helper: subset to RNA-seq features only ──────────────────────────────────
+def get_rnaseq_subset(df, rnaseq_cols):
+    """Return df subsetted to Source Name, Group, and intersecting RNA-seq columns."""
+    available = [c for c in rnaseq_cols if c in df.columns]
+    return df[['Source Name', 'Group'] + available].copy()
+
+# Build subsets
+orig_rna   = get_rnaseq_subset(rr9_all_df, rnaseq_columns).dropna()
+knn_rna    = get_rnaseq_subset(knn_imputed_df, rnaseq_columns).dropna()
+rsi_rna    = get_rnaseq_subset(rsi_imputed_df, rnaseq_columns).dropna()
+mice_rna   = get_rnaseq_subset(mice_bag_imputed_df, rnaseq_columns).dropna()
+# hybrid_rna = get_rnaseq_subset(hybrid_imputed_df, rnaseq_columns).dropna()
+
+datasets = {
+    'Original': orig_rna,
+    'KNN':      knn_rna,
+    'RSI':      rsi_rna,
+    'MICE-Bagger': mice_rna,
+    # 'Hybrid':   hybrid_rna,
+}
+
+print("Dataset sizes (samples × RNA-seq features):")
+for name, df in datasets.items():
+    print(f"  {name}: {df.shape[0]} samples × {df.shape[1]-2} features")
+```
+
+---
+
+## 1. Supervised Classification
+
+```{python}
+#| label: Classifier functions
+#| echo: false
+#| cache: true
+
+def prepare_Xy(df, label_col='Group'):
+    """Scale features and encode binary label (F=1, non-F=0)."""
+    X = df.drop(columns=['Source Name', label_col])
+    y = df[label_col].apply(lambda x: 1 if x == 'F' else 0)
+    X_scaled = StandardScaler().fit_transform(X)
+    return X_scaled, y.values
+
+
+def run_classifiers(df, name, test_size=0.2, random_state=42, cv_folds=5):
+    """
+    Train SVM (RBF kernel) and Random Forest classifiers.
+    Returns dict of metrics.
+    """
+    X, y = prepare_Xy(df)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=y
+    )
+
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    results = {'Dataset': name}
+
+    # ── SVM ──────────────────────────────────────────────────────────────────
+    svm = SVC(kernel='rbf', probability=True, random_state=random_state)
+    svm_cv  = cross_val_score(svm, X_train, y_train, cv=cv, scoring='accuracy')
+    svm.fit(X_train, y_train)
+    svm_pred = svm.predict(X_test)
+    svm_prob = svm.predict_proba(X_test)[:, 1]
+
+    results['SVM CV Accuracy']   = round(svm_cv.mean(), 3)
+    results['SVM CV Std']        = round(svm_cv.std() * 2, 3)
+    results['SVM Test Accuracy'] = round(accuracy_score(y_test, svm_pred), 3)
+    results['_svm_prob']         = svm_prob
+    results['_y_test']           = y_test
+
+    # ── Random Forest ─────────────────────────────────────────────────────────
+    rf = RandomForestClassifier(n_estimators=100, random_state=random_state, n_jobs=-1)
+    rf_cv  = cross_val_score(rf, X_train, y_train, cv=cv, scoring='accuracy')
+    rf.fit(X_train, y_train)
+    rf_pred = rf.predict(X_test)
+
+    results['RF CV Accuracy']   = round(rf_cv.mean(), 3)
+    results['RF CV Std']        = round(rf_cv.std() * 2, 3)
+    results['RF Test Accuracy'] = round(accuracy_score(y_test, rf_pred), 3)
+
+    return results
+
+
+# Run classifiers on all datasets
+classifier_results = {}
+for name, df in datasets.items():
+    print(f"Running classifiers on: {name}")
+    classifier_results[name] = run_classifiers(df, name)
+    print(f"  SVM CV: {classifier_results[name]['SVM CV Accuracy']} "
+          f"(+/- {classifier_results[name]['SVM CV Std']})")
+    print(f"  RF  CV: {classifier_results[name]['RF CV Accuracy']} "
+          f"(+/- {classifier_results[name]['RF CV Std']})\n")
+```
+
+### ROC Curves — SVM
+
+```{python}
+#| label: ROC curves
+#| echo: false
+#| cache: true
+
+fig, ax = plt.subplots(figsize=(7, 5))
+colors = ['#444444', '#1F77B4', '#FF7F0E', '#2CA02C', '#D62728']
+
+for (name, res), color in zip(classifier_results.items(), colors):
+    y_test = res['_y_test']
+    prob   = res['_svm_prob']
+    if len(np.unique(y_test)) < 2:
+        continue
+    fpr, tpr, _ = roc_curve(y_test, prob)
+    roc_auc     = auc(fpr, tpr)
+    ax.plot(fpr, tpr, color=color, lw=2,
+            label=f'{name} (AUC = {roc_auc:.2f})')
+
+ax.plot([0, 1], [0, 1], 'k--', lw=1)
+ax.set_xlabel('False Positive Rate', fontsize=11)
+ax.set_ylabel('True Positive Rate', fontsize=11)
+ax.set_title('ROC Curves — SVM Classifier', fontsize=12, fontweight='bold')
+ax.legend(loc='lower right', fontsize=9)
+ax.set_xlim([0, 1]); ax.set_ylim([0, 1.02])
+plt.tight_layout()
+plt.savefig('roc_curves_svm.png', dpi=300, bbox_inches='tight')
+plt.show()
+```
+
+---
+
+## 2. Unsupervised Clustering (K-Means, k=2)
+
+```{python}
+#| label: K-means clustering
+#| echo: false
+#| cache: true
+
+def run_clustering(df, name, k=2, random_state=42):
+    X, y = prepare_Xy(df)
+    km  = KMeans(n_clusters=k, random_state=random_state, n_init=10)
+    labels = km.fit_predict(X)
+    ari = adjusted_rand_score(y, labels)
+    return round(ari, 3)
+
+ari_results = {}
+for name, df in datasets.items():
+    ari_results[name] = run_clustering(df, name)
+    print(f"ARI — {name}: {ari_results[name]}")
+```
+
+---
+
+## 3. Correlation Structure Preservation
+
+```{python}
+#| label: Spearman correlation structure
+#| echo: false
+#| cache: true
+
+def spearman_corr_preservation(orig_df, imp_df):
+    """
+    Compute Spearman rho between the vectorised correlation matrices
+    of the original and imputed datasets.
+    """
+    # Align columns
+    common_cols = list(set(orig_df.columns) & set(imp_df.columns) - {'Source Name', 'Group'})
+    orig_corr = orig_df[common_cols].corr().values.flatten()
+    imp_corr  = imp_df[common_cols].corr().values.flatten()
+    rho, _ = stats.spearmanr(orig_corr, imp_corr)
+    return round(rho, 3)
+
+rho_results = {}
+for name, df in datasets.items():
+    if name == 'Original':
+        rho_results[name] = 1.000
+    else:
+        rho_results[name] = spearman_corr_preservation(orig_rna, df)
+    print(f"Spearman rho — {name}: {rho_results[name]}")
+```
+
+---
+
+## 4. Marginal Distribution Similarity (KS Statistic)
+
+```{python}
+#| label: KS statistic
+#| echo: false
+#| cache: true
+
+def mean_ks_statistic(orig_df, imp_df):
+    """
+    Compute mean KS statistic across all intersecting numeric features.
+    """
+    common_cols = list(set(orig_df.columns) & set(imp_df.columns) - {'Source Name', 'Group'})
+    ks_stats = []
+    for col in common_cols:
+        stat, _ = ks_2samp(orig_df[col].dropna(), imp_df[col].dropna())
+        ks_stats.append(stat)
+    return round(np.mean(ks_stats), 3)
+
+ks_results = {}
+for name, df in datasets.items():
+    if name == 'Original':
+        ks_results[name] = 0.000
+    else:
+        ks_results[name] = mean_ks_statistic(orig_rna, df)
+    print(f"Mean KS statistic — {name}: {ks_results[name]}")
+```
+
+---
+
+## 5. Summary Table
+
+```{python}
+#| label: Summary table
+#| echo: false
+#| cache: true
+
+summary_rows = []
+for name in datasets.keys():
+    res = classifier_results[name]
+    row = {
+        'Method':            name,
+        'SVM CV Accuracy':   res['SVM CV Accuracy'],
+        'SVM Test Accuracy': res['SVM Test Accuracy'],
+        'RF CV Accuracy':    res['RF CV Accuracy'],
+        'RF Test Accuracy':  res['RF Test Accuracy'],
+        'Clustering ARI':    ari_results[name],
+        'Correlation Rho':   rho_results[name],
+        'Mean KS Stat':      ks_results[name],
+    }
+    summary_rows.append(row)
+
+summary_df = pd.DataFrame(summary_rows)
+print(summary_df.to_string(index=False))
+summary_df.to_csv('imputation_validation_summary.csv', index=False)
+```
+
+---
+
+## 6. PCA Visualisation — Original vs Imputed
+
+```{python}
+#| label: PCA comparison plots
+#| echo: false
+#| cache: true
+
+def pca_scatter(ax, df, title, palette=None):
+    X, y = prepare_Xy(df)
+    pca  = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(X)
+    ev   = pca.explained_variance_ratio_
+    colors_map = {0: '#1F77B4', 1: '#D62728'}
+    labels_map = {0: 'Non-Flight', 1: 'Flight'}
+    for label in [0, 1]:
+        idx = y == label
+        ax.scatter(coords[idx, 0], coords[idx, 1],
+                   c=colors_map[label], label=labels_map[label],
+                   alpha=0.8, edgecolors='white', linewidth=0.4, s=60)
+    ax.set_xlabel(f'PC1 ({ev[0]*100:.1f}%)', fontsize=9)
+    ax.set_ylabel(f'PC2 ({ev[1]*100:.1f}%)', fontsize=9)
+    ax.set_title(title, fontsize=10, fontweight='bold')
+    ax.legend(fontsize=8)
+    ax.spines[['top', 'right']].set_visible(False)
+
+fig, axes = plt.subplots(1, 5, figsize=(22, 4))
+for ax, (name, df) in zip(axes, datasets.items()):
+    pca_scatter(ax, df, name)
+
+plt.suptitle('PCA Projection — Flight vs Non-Flight (RNA-seq features)',
+             fontsize=12, fontweight='bold', y=1.02)
+plt.tight_layout()
+plt.savefig('pca_comparison_imputed.png', dpi=300, bbox_inches='tight')
+plt.show()
+```

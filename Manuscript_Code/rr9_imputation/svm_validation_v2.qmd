@@ -1,0 +1,584 @@
+---
+title: 'RR9 Dataset Imputation Validation'
+author: 'Lauren Sanders, Jian Gong, Vaishnavi Nagesh'
+format:
+    html:
+        toc: true
+        toc-depth: 5
+        code-fold: true
+        page-layout: full
+        code-overflow: wrap 
+        anchor-sections: true
+        max-width: 1000px
+---
+
+## Overview
+
+This notebook validates the effectiveness of imputation methods by comparing
+performance of downstream analyses on the original and imputed datasets.
+Validation is performed across two feature modalities: **RNA-seq** and **TUNEL**.
+Four imputation methods are compared: KNN, Random Sample Imputer (RSI),
+MICE with ElasticNet, and the per-column Hybrid strategy.
+
+Three additional validation approaches address limitations of small sample size
+and classifier overfitting:
+
+- **Masked value recovery**: directly measures imputation accuracy against known values
+- **Cross-dataset validation**: trains on imputed data, tests on original observed data
+- **Permutation test**: validates that classifier results are not due to chance
+
+```{python}
+#| label: Import libraries
+#| echo: false
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import scipy.stats as stats
+import joblib
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
+
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import (train_test_split, cross_val_score,
+                                     StratifiedKFold, permutation_test_score)
+from sklearn.metrics import (accuracy_score, roc_curve, auc,
+                             adjusted_rand_score, mean_squared_error)
+from sklearn.cluster import KMeans
+from sklearn.impute import KNNImputer
+from sklearn.experimental import enable_iterative_imputer  # noqa
+from sklearn.impute import IterativeImputer
+from scipy.stats import ks_2samp, pearsonr
+
+METHOD_COLORS = {
+    'Original':     '#444444',
+    'KNN':          '#1F77B4',
+    'RSI':          '#FF7F0E',
+    'MICE-Elastic': '#2CA02C',
+    'Hybrid':       '#9467BD',
+}
+MVR_METHODS = ['KNN', 'RSI', 'MICE-Elastic']   # Hybrid MVR handled by its own pipeline
+
+def _hdr(title, width=62):
+    """Print a clearly visible section header before output blocks."""
+    bar = '─' * width
+    print(f"\n┌{bar}┐")
+    print(f"│  {title:<{width-2}}│")
+    print(f"└{bar}┘")
+```
+
+```{python}
+#| label: Load datasets
+#| echo: false
+
+# ── Saved pipelines ───────────────────────────────────────────────────────────
+knn_pipe  = joblib.load('knn2_impute_full_df_pipeline.joblib')
+mice_pipe = joblib.load('mice_ard_pipeline.joblib')
+rsi_pipe  = joblib.load('full_df_rsi.joblib')
+
+_hdr("Saved Pipelines — Hyperparameters Used for Validation")
+print(f"  KNN:          n_neighbors={knn_pipe['params']['n_neighbors']}, "
+      f"weights={knn_pipe['params']['weights']!r}")
+print(f"  MICE-Elastic: estimator={mice_pipe['estimator']!r}, "
+      f"n_nearest={mice_pipe['n_nearest_features']}, max_iter={mice_pipe['max_iter']}")
+print(f"  RSI:          {type(rsi_pipe).__name__}")
+
+# ── Original + imputed full datasets ─────────────────────────────────────────
+rr9_all_df        = pd.read_csv('full_df.csv')
+knn_imputed_df    = pd.read_csv('full_df_knn2.csv')
+rsi_imputed_df    = pd.read_csv('full_df_rsi.csv')
+mice_imputed_df   = pd.read_csv('full_df_mice_elastic_weak.csv')
+hybrid_imputed_df = pd.read_csv('full_df_hybrid.csv')
+
+# ── Modality column lists ─────────────────────────────────────────────────────
+rnaseq_columns = pd.read_csv('rnaseq_columns.csv', header=None)[0].tolist()
+tunel_columns  = pd.read_csv('tunel_columns.csv',  header=None)[0].tolist()
+
+MODALITY_COLS = {
+    'RNA-seq': rnaseq_columns,
+    'TUNEL':   tunel_columns,
+}
+
+# ── Build per-modality dataset dicts ─────────────────────────────────────────
+def get_subset(df, cols):
+    available = [c for c in cols if c in df.columns]
+    return df[['Source Name', 'Group'] + available].copy()
+
+ALL_MODALITIES = {}
+for mod_name, col_list in MODALITY_COLS.items():
+    orig_sub = get_subset(rr9_all_df,        col_list).dropna()
+    dsets = {
+        'Original':     orig_sub,
+        'KNN':          get_subset(knn_imputed_df,    col_list).dropna(),
+        'RSI':          get_subset(rsi_imputed_df,    col_list).dropna(),
+        'MICE-Elastic': get_subset(mice_imputed_df,   col_list).dropna(),
+        'Hybrid':       get_subset(hybrid_imputed_df, col_list).dropna(),
+    }
+    ALL_MODALITIES[mod_name] = {'datasets': dsets, 'orig': orig_sub}
+    _hdr(f"Dataset Sizes — {mod_name}  (samples × features, after dropna)")
+    for name, df in dsets.items():
+        print(f"  {name}: {df.shape[0]} samples × {df.shape[1]-2} features")
+
+# ── Helper: prepare features and labels ──────────────────────────────────────
+def prepare_Xy(df, label_col='Group'):
+    X = df.drop(columns=['Source Name', label_col])
+    y = df[label_col].apply(lambda x: 1 if x == 'F' else 0)
+    return StandardScaler().fit_transform(X), y.values
+```
+
+---
+
+## 1. Supervised Classification
+
+```{python}
+#| label: Classifier functions
+#| echo: false
+
+def run_classifiers(df, name, test_size=0.2, random_state=42, cv_folds=5):
+    X, y = prepare_Xy(df)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=y)
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    results = {'Dataset': name}
+
+    svm = SVC(kernel='rbf', probability=True, random_state=random_state)
+    svm_cv = cross_val_score(svm, X_train, y_train, cv=cv, scoring='accuracy')
+    svm.fit(X_train, y_train)
+    svm_pred = svm.predict(X_test)
+    results['SVM CV Accuracy']   = round(svm_cv.mean(), 3)
+    results['SVM CV Std']        = round(svm_cv.std() * 2, 3)
+    results['SVM Test Accuracy'] = round(accuracy_score(y_test, svm_pred), 3)
+    results['_svm_prob']         = svm.predict_proba(X_test)[:, 1]
+    results['_y_test']           = y_test
+
+    rf = RandomForestClassifier(n_estimators=100, random_state=random_state, n_jobs=-1)
+    rf_cv = cross_val_score(rf, X_train, y_train, cv=cv, scoring='accuracy')
+    rf.fit(X_train, y_train)
+    results['RF CV Accuracy']   = round(rf_cv.mean(), 3)
+    results['RF CV Std']        = round(rf_cv.std() * 2, 3)
+    results['RF Test Accuracy'] = round(accuracy_score(y_test, rf.predict(X_test)), 3)
+    return results
+
+classifier_results = {}
+for mod_name, mod in ALL_MODALITIES.items():
+    _hdr(f"Section 1: Supervised Classification — SVM & RF  [{mod_name}]")
+    classifier_results[mod_name] = {}
+    for name, df in mod['datasets'].items():
+        classifier_results[mod_name][name] = run_classifiers(df, name)
+        r = classifier_results[mod_name][name]
+        print(f"  {name:<15}  SVM CV: {r['SVM CV Accuracy']} (+/-{r['SVM CV Std']})  "
+              f"RF CV: {r['RF CV Accuracy']} (+/-{r['RF CV Std']})")
+```
+
+### ROC Curves — SVM
+
+```{python}
+#| label: ROC curves
+#| echo: false
+
+n_mods = len(ALL_MODALITIES)
+fig, axes = plt.subplots(1, n_mods, figsize=(7 * n_mods, 5))
+if n_mods == 1:
+    axes = [axes]
+
+for ax, (mod_name, mod) in zip(axes, ALL_MODALITIES.items()):
+    for name, res in classifier_results[mod_name].items():
+        y_test = res['_y_test']
+        if len(np.unique(y_test)) < 2:
+            continue
+        fpr, tpr, _ = roc_curve(y_test, res['_svm_prob'])
+        ax.plot(fpr, tpr, color=METHOD_COLORS.get(name, '#888888'), lw=2,
+                label=f"{name} (AUC={auc(fpr, tpr):.2f})")
+    ax.plot([0,1],[0,1],'k--',lw=1)
+    ax.set_xlabel('False Positive Rate', fontsize=11)
+    ax.set_ylabel('True Positive Rate', fontsize=11)
+    ax.set_title(f'ROC — SVM  [{mod_name}]', fontsize=12, fontweight='bold')
+    ax.legend(loc='lower right', fontsize=9)
+    ax.set_xlim([0,1]); ax.set_ylim([0,1.02])
+    ax.spines[['top','right']].set_visible(False)
+
+plt.tight_layout()
+plt.savefig('roc_curves_svm.png', dpi=300, bbox_inches='tight')
+plt.show()
+```
+
+---
+
+## 2. Unsupervised Clustering (K-Means, k=2)
+
+```{python}
+#| label: K-means clustering
+#| echo: false
+
+def run_clustering(df, k=2, random_state=42):
+    X, y = prepare_Xy(df)
+    labels = KMeans(n_clusters=k, random_state=random_state, n_init=10).fit_predict(X)
+    return round(adjusted_rand_score(y, labels), 3)
+
+ari_results = {}
+for mod_name, mod in ALL_MODALITIES.items():
+    _hdr(f"Section 2: K-Means Clustering (k=2) — Adjusted Rand Index  [{mod_name}]")
+    ari_results[mod_name] = {}
+    for name, df in mod['datasets'].items():
+        ari_results[mod_name][name] = run_clustering(df)
+        print(f"  {name:<15}  ARI = {ari_results[mod_name][name]}")
+```
+
+---
+
+## 3. Correlation Structure Preservation
+
+```{python}
+#| label: Spearman correlation structure
+#| echo: false
+
+def spearman_corr_preservation(orig_df, imp_df):
+    common = list(set(orig_df.columns) & set(imp_df.columns) - {'Source Name','Group'})
+    rho, _ = stats.spearmanr(orig_df[common].corr().values.flatten(),
+                              imp_df[common].corr().values.flatten())
+    return round(rho, 3)
+
+rho_results = {}
+for mod_name, mod in ALL_MODALITIES.items():
+    _hdr(f"Section 3: Correlation Structure Preservation — Spearman ρ  [{mod_name}]")
+    rho_results[mod_name] = {}
+    orig_df = mod['orig']
+    for name, df in mod['datasets'].items():
+        rho_results[mod_name][name] = (1.000 if name == 'Original'
+                                       else spearman_corr_preservation(orig_df, df))
+        print(f"  {name:<15}  ρ = {rho_results[mod_name][name]}")
+```
+
+---
+
+## 4. Marginal Distribution Similarity (KS Statistic)
+
+```{python}
+#| label: KS statistic
+#| echo: false
+
+def mean_ks_statistic(orig_df, imp_df):
+    common = list(set(orig_df.columns) & set(imp_df.columns) - {'Source Name','Group'})
+    return round(np.mean([ks_2samp(orig_df[c].dropna(), imp_df[c].dropna())[0]
+                           for c in common]), 3)
+
+ks_results = {}
+for mod_name, mod in ALL_MODALITIES.items():
+    _hdr(f"Section 4: Marginal Distribution Similarity — Mean KS Statistic  [{mod_name}]")
+    ks_results[mod_name] = {}
+    orig_df = mod['orig']
+    for name, df in mod['datasets'].items():
+        ks_results[mod_name][name] = (0.000 if name == 'Original'
+                                      else mean_ks_statistic(orig_df, df))
+        print(f"  {name:<15}  KS = {ks_results[mod_name][name]}")
+```
+
+---
+
+## 5. Masked Value Recovery (Gold Standard)
+
+Masks 20% of observed values, imputes with each method using saved pipeline
+hyperparameters, and compares imputed vs true values via RMSE and Pearson r.
+Hybrid is excluded here as its accuracy was evaluated within its own pipeline.
+
+```{python}
+#| label: Masked value recovery
+#| echo: false
+
+def masked_value_recovery(orig_df, mask_fraction=0.20, random_state=42):
+    from feature_engine.imputation import RandomSampleImputer
+    rng = np.random.default_rng(random_state)
+    feature_cols = [c for c in orig_df.columns if c not in ('Source Name','Group')]
+    X_true   = orig_df[feature_cols].values.astype(float)
+    X_masked = X_true.copy()
+
+    obs_idx  = np.argwhere(~np.isnan(X_true))
+    chosen   = rng.choice(len(obs_idx), size=int(len(obs_idx)*mask_fraction), replace=False)
+    mask_idx = obs_idx[chosen]
+    for r, c in mask_idx:
+        X_masked[r, c] = np.nan
+    true_vals = X_true[mask_idx[:,0], mask_idx[:,1]]
+
+    col_means = np.nanmean(X_masked, axis=0)
+    col_stds  = np.nanstd(X_masked,  axis=0); col_stds[col_stds==0] = 1
+    X_scaled  = (X_masked - col_means) / col_stds
+
+    results, imp_vals = {}, {}
+
+    # KNN — hyperparams from knn2_impute_full_df_pipeline.joblib
+    X_knn_z = KNNImputer(**knn_pipe['params']).fit_transform(X_scaled)
+    knn_v   = (X_knn_z * col_stds + col_means)[mask_idx[:,0], mask_idx[:,1]]
+    results['KNN']  = {'RMSE': round(np.sqrt(mean_squared_error(true_vals, knn_v)), 4),
+                       'Pearson r': round(pearsonr(true_vals, knn_v)[0], 4)}
+    imp_vals['KNN'] = knn_v
+
+    # RSI — re-fit on this subset (non-parametric, no tunable hyperparams)
+    rsi_imp = RandomSampleImputer(random_state=random_state)
+    rsi_imp.fit(pd.DataFrame(X_masked, columns=feature_cols))
+    rsi_v   = rsi_imp.transform(pd.DataFrame(X_masked, columns=feature_cols)).values
+    rsi_v   = rsi_v[mask_idx[:,0], mask_idx[:,1]]
+    results['RSI']  = {'RMSE': round(np.sqrt(mean_squared_error(true_vals, rsi_v)), 4),
+                       'Pearson r': round(pearsonr(true_vals, rsi_v)[0], 4)}
+    imp_vals['RSI'] = rsi_v
+
+    # MICE-Elastic — hyperparams from mice_ard_pipeline.joblib
+    mice_imp = IterativeImputer(
+        random_state=random_state, estimator=mice_pipe['estimator_object'],
+        n_nearest_features=mice_pipe['n_nearest_features'],
+        max_iter=mice_pipe['max_iter'],
+        tol=0.01, imputation_order='roman', skip_complete=True)
+    mice_v   = (mice_imp.fit_transform(X_scaled) * col_stds + col_means)[mask_idx[:,0], mask_idx[:,1]]
+    results['MICE-Elastic']  = {'RMSE': round(np.sqrt(mean_squared_error(true_vals, mice_v)), 4),
+                                 'Pearson r': round(pearsonr(true_vals, mice_v)[0], 4)}
+    imp_vals['MICE-Elastic'] = mice_v
+
+    return results, true_vals, imp_vals
+
+mvr_results, mvr_true, mvr_imputed = {}, {}, {}
+for mod_name, mod in ALL_MODALITIES.items():
+    _hdr(f"Section 5: Masked Value Recovery (20% hold-out) — RMSE & Pearson r  [{mod_name}]")
+    res, tv, iv = masked_value_recovery(mod['orig'])
+    mvr_results[mod_name] = res
+    mvr_true[mod_name]    = tv
+    mvr_imputed[mod_name] = iv
+    print(f"  {'Method':<15} {'RMSE':>10} {'Pearson r':>12}")
+    print("  " + "-"*38)
+    for m, r in res.items():
+        print(f"  {m:<15} {r['RMSE']:>10.4f} {r['Pearson r']:>12.4f}")
+```
+
+### Masked Value Recovery — Scatter Plots
+
+```{python}
+#| label: MVR scatter plots
+#| echo: false
+
+n_mods    = len(ALL_MODALITIES)
+n_methods = len(MVR_METHODS)
+fig, axes = plt.subplots(n_mods, n_methods,
+                         figsize=(5 * n_methods, 4 * n_mods), squeeze=False)
+
+for row, (mod_name, mod) in enumerate(ALL_MODALITIES.items()):
+    tv = mvr_true[mod_name]
+    for col, method in enumerate(MVR_METHODS):
+        ax   = axes[row][col]
+        iv   = mvr_imputed[mod_name][method]
+        r    = mvr_results[mod_name][method]['Pearson r']
+        rmse = mvr_results[mod_name][method]['RMSE']
+        ax.scatter(tv, iv, alpha=0.5, s=20,
+                   color=METHOD_COLORS[method], edgecolors='white', linewidth=0.3)
+        lim = [min(tv.min(), iv.min()), max(tv.max(), iv.max())]
+        ax.plot(lim, lim, 'k--', lw=1)
+        ax.set_xlabel('True Values', fontsize=10)
+        ax.set_ylabel('Imputed Values', fontsize=10)
+        ax.set_title(f'[{mod_name}] {method}\nr={r:.3f}, RMSE={rmse:.3f}',
+                     fontsize=9, fontweight='bold')
+        ax.spines[['top','right']].set_visible(False)
+
+plt.suptitle('Masked Value Recovery — True vs Imputed Values',
+             fontsize=12, fontweight='bold', y=1.01)
+plt.tight_layout()
+plt.savefig('masked_value_recovery.png', dpi=300, bbox_inches='tight')
+plt.show()
+```
+
+---
+
+## 6. Cross-Dataset Validation
+
+```{python}
+#| label: Cross-dataset validation
+#| echo: false
+
+def cross_dataset_validation(train_df, test_df, random_state=42, cv_folds=5):
+    common  = list(set(train_df.columns) & set(test_df.columns) - {'Source Name','Group'})
+    scaler  = StandardScaler().fit(train_df[common].values.astype(float))
+    X_train = scaler.transform(train_df[common].values.astype(float))
+    X_test  = scaler.transform(test_df[common].values.astype(float))
+    y_train = train_df['Group'].apply(lambda x: 1 if x=='F' else 0).values
+    y_test  = test_df['Group'].apply(lambda x: 1 if x=='F' else 0).values
+    cv      = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    results = {}
+
+    svm = SVC(kernel='rbf', probability=True, random_state=random_state)
+    results['SVM CV Accuracy']      = round(cross_val_score(svm, X_train, y_train, cv=cv, scoring='accuracy').mean(), 3)
+    svm.fit(X_train, y_train)
+    results['SVM Test on Original'] = round(accuracy_score(y_test, svm.predict(X_test)), 3)
+
+    rf = RandomForestClassifier(n_estimators=100, random_state=random_state, n_jobs=-1)
+    results['RF CV Accuracy']       = round(cross_val_score(rf, X_train, y_train, cv=cv, scoring='accuracy').mean(), 3)
+    rf.fit(X_train, y_train)
+    results['RF Test on Original']  = round(accuracy_score(y_test, rf.predict(X_test)), 3)
+    return results
+
+cdv_results = {}
+for mod_name, mod in ALL_MODALITIES.items():
+    _hdr(f"Section 6: Cross-Dataset Validation — Train on Imputed, Test on Original  [{mod_name}]")
+    cdv_results[mod_name] = {}
+    orig_df = mod['orig']
+    print(f"  {'Method':<15} {'SVM CV':>8} {'SVM→Orig':>10} {'RF CV':>8} {'RF→Orig':>10}")
+    print("  " + "-"*55)
+    for name, df in mod['datasets'].items():
+        if name == 'Original':
+            continue
+        res = cross_dataset_validation(df, orig_df)
+        cdv_results[mod_name][name] = res
+        print(f"  {name:<15} {res['SVM CV Accuracy']:>8.3f} "
+              f"{res['SVM Test on Original']:>10.3f} "
+              f"{res['RF CV Accuracy']:>8.3f} "
+              f"{res['RF Test on Original']:>10.3f}")
+```
+
+---
+
+## 7. Permutation Test
+
+```{python}
+#| label: Permutation test
+#| echo: false
+
+def run_permutation_test(df, n_permutations=1000, random_state=42, cv_folds=5):
+    X, y = prepare_Xy(df)
+    cv   = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    svm  = SVC(kernel='rbf', random_state=random_state)
+    ts, ps, pv = permutation_test_score(
+        svm, X, y, cv=cv, n_permutations=n_permutations,
+        scoring='accuracy', random_state=random_state, n_jobs=-1)
+    return round(ts, 3), ps, round(pv, 4)
+
+perm_results = {}
+for mod_name, mod in ALL_MODALITIES.items():
+    _hdr(f"Section 7: Permutation Test — SVM, 1000 permutations, 5-fold CV  [{mod_name}]")
+    perm_results[mod_name] = {}
+    for name, df in mod['datasets'].items():
+        ts, ps, pv = run_permutation_test(df)
+        perm_results[mod_name][name] = {
+            'True Score': ts, 'Permuted Mean': round(np.mean(ps), 3), 'p-value': pv,
+            '_perm_scores': ps,
+        }
+        print(f"  {name:<15}  true={ts:.3f}  null={np.mean(ps):.3f}  p={pv:.4f}")
+```
+
+### Permutation Test — Null Distributions
+
+```{python}
+#| label: Permutation test plots
+#| echo: false
+
+n_mods    = len(ALL_MODALITIES)
+n_methods = len(next(iter(perm_results.values())))
+fig, axes = plt.subplots(n_mods, n_methods,
+                         figsize=(4 * n_methods, 4 * n_mods), squeeze=False)
+
+for row, (mod_name, mod_perm) in enumerate(perm_results.items()):
+    for col, (name, res) in enumerate(mod_perm.items()):
+        ax = axes[row][col]
+        ax.hist(res['_perm_scores'], bins=30, color='lightgrey',
+                edgecolor='white', linewidth=0.5)
+        ax.axvline(res['True Score'], color=METHOD_COLORS.get(name,'#888'), lw=2,
+                   label=f"True: {res['True Score']:.3f}")
+        ax.axvline(res['Permuted Mean'], color='black', lw=1, ls='--',
+                   label=f"Null: {res['Permuted Mean']:.3f}")
+        ax.set_title(f"[{mod_name}] {name}\np={res['p-value']:.4f}",
+                     fontsize=9, fontweight='bold')
+        ax.set_xlabel('Accuracy', fontsize=8)
+        ax.set_ylabel('Count', fontsize=8)
+        ax.legend(fontsize=7)
+        ax.spines[['top','right']].set_visible(False)
+
+plt.suptitle('Permutation Test — SVM Classifier Null Distributions',
+             fontsize=12, fontweight='bold', y=1.01)
+plt.tight_layout()
+plt.savefig('permutation_test.png', dpi=300, bbox_inches='tight')
+plt.show()
+```
+
+---
+
+## 8. Summary Table
+
+```{python}
+#| label: Summary table
+#| echo: false
+
+for mod_name, mod in ALL_MODALITIES.items():
+    _hdr(f"Section 8: Summary Table — All Validation Metrics  [{mod_name}]")
+    summary_rows = []
+    for name in mod['datasets'].keys():
+        row = {
+            'Method':            name,
+            'SVM CV Accuracy':   classifier_results[mod_name][name]['SVM CV Accuracy'],
+            'SVM Test Accuracy': classifier_results[mod_name][name]['SVM Test Accuracy'],
+            'RF CV Accuracy':    classifier_results[mod_name][name]['RF CV Accuracy'],
+            'RF Test Accuracy':  classifier_results[mod_name][name]['RF Test Accuracy'],
+            'Clustering ARI':    ari_results[mod_name][name],
+            'Correlation Rho':   rho_results[mod_name][name],
+            'Mean KS Stat':      ks_results[mod_name][name],
+            'Perm p-value':      perm_results[mod_name][name]['p-value'],
+        }
+        if name in cdv_results.get(mod_name, {}):
+            row['SVM→Orig'] = cdv_results[mod_name][name]['SVM Test on Original']
+            row['RF→Orig']  = cdv_results[mod_name][name]['RF Test on Original']
+        else:
+            row['SVM→Orig'] = '—'; row['RF→Orig'] = '—'
+
+        if name in mvr_results.get(mod_name, {}):
+            row['MVR RMSE']      = mvr_results[mod_name][name]['RMSE']
+            row['MVR Pearson r'] = mvr_results[mod_name][name]['Pearson r']
+        else:
+            row['MVR RMSE'] = '—'; row['MVR Pearson r'] = '—'
+        summary_rows.append(row)
+
+    summary_df = pd.DataFrame(summary_rows)
+    display(summary_df)
+    summary_df.to_csv(f'imputation_validation_summary_{mod_name.lower().replace("-","_")}.csv',
+                      index=False)
+```
+
+---
+
+## 9. PCA Visualisation — Original vs Imputed
+
+```{python}
+#| label: PCA comparison plots
+#| echo: false
+
+def pca_scatter(ax, df, title):
+    X, y = prepare_Xy(df)
+    pca    = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(X)
+    ev     = pca.explained_variance_ratio_
+    # Align sign: Flight centroid positive on each PC (PCA sign is arbitrary)
+    for pc in range(2):
+        if coords[y == 1, pc].mean() < 0:
+            coords[:, pc] *= -1
+    for label, color, lbl in [(0,'#1F77B4','Non-Flight'),(1,'#D62728','Flight')]:
+        idx = y == label
+        ax.scatter(coords[idx,0], coords[idx,1], c=color, label=lbl,
+                   alpha=0.8, edgecolors='white', linewidth=0.4, s=60)
+    ax.set_xlabel(f'PC1 ({ev[0]*100:.1f}%)', fontsize=9)
+    ax.set_ylabel(f'PC2 ({ev[1]*100:.1f}%)', fontsize=9)
+    ax.set_title(title, fontsize=10, fontweight='bold')
+    ax.legend(fontsize=8)
+    ax.spines[['top','right']].set_visible(False)
+
+n_mods    = len(ALL_MODALITIES)
+n_methods = len(next(iter(ALL_MODALITIES.values()))['datasets'])
+fig, axes = plt.subplots(n_mods, n_methods,
+                         figsize=(4 * n_methods, 4 * n_mods), squeeze=False)
+
+for row, (mod_name, mod) in enumerate(ALL_MODALITIES.items()):
+    for col, (name, df) in enumerate(mod['datasets'].items()):
+        pca_scatter(axes[row][col], df, f'[{mod_name}] {name}')
+
+plt.suptitle('PCA — Flight vs Non-Flight',
+             fontsize=12, fontweight='bold', y=1.01)
+plt.tight_layout()
+plt.savefig('pca_comparison_imputed.png', dpi=300, bbox_inches='tight')
+plt.show()
+```
